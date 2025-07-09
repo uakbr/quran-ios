@@ -11,6 +11,7 @@ import AuthenticationClient
 import BatchDownloader
 import CoreDataModel
 import CoreDataPersistence
+import Crashing
 import Foundation
 import LastPagePersistence
 import NotePersistence

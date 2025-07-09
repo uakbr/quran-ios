@@ -73,7 +73,8 @@ public struct LaunchBuilder {
         if let route = parseRoute(from: path) {
             switch route {
             case .page(let pageNumber):
-                if let page = Page(pageNumber) {
+                if let quran = findCurrentQuran(),
+                   let page = Page(quran: quran, pageNumber: pageNumber) {
                     logger.info("Navigating to page: \(pageNumber)")
                     navigator.navigateTo(page: page, lastPage: nil, highlightingSearchAyah: nil)
                     return true
@@ -202,6 +203,6 @@ public struct LaunchBuilder {
     
     private func findCurrentQuran() -> Quran? {
         // Use the default Quran for now (could be enhanced to use current reading preference)
-        return Quran.hafsMadani1
+        return Quran.hafsMadani1405
     }
 }
