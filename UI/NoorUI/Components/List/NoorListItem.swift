@@ -179,47 +179,32 @@ public struct NoorListItem: View {
     // MARK: - Accessibility Support
     
     /// Provides comprehensive accessibility support for the list item
-    @ViewBuilder
-    private func accessibilityEnhanced<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+    private var accessibilityEnhanced: some View {
+        content
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel ?? "List item")
+            .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(accessibilityHint)
             .accessibilityValue(accessibilityValue)
-            .accessibilityIdentifier(accessibilityIdentifier ?? "list_item")
-            .accessibilityAction(.default) {
-                onSelection?()
-            }
     }
     
     /// Provides accessible image handling
-    @ViewBuilder
-    private func accessibleImage() -> some View {
-        if let leading = leading {
-            leading
+    private var accessibleImage: some View {
+        if let image = image {
+            itemImage(image)
                 .accessibilityHidden(true) // Hide decorative images from VoiceOver
         }
     }
     
     /// Combines accessibility elements properly for complex list items
-    @ViewBuilder 
-    private func combinedAccessibilityView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: .s1) {
-            accessibleImage()
-            content()
-            if let trailing = trailing {
-                trailing
-                    .accessibilityHidden(true)
-            }
+    private var combinedAccessibilityView: some View {
+        HStack(spacing: 8) {
+            accessibleImage
+            content
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(buildAccessibilityLabel())
         .accessibilityHint(accessibilityHint)
         .accessibilityValue(accessibilityValue)
-        .accessibilityIdentifier(accessibilityIdentifier ?? "combined_list_item")
-        .accessibilityAction(.default) {
-            onSelection?()
-        }
     }
     
     /// Builds a comprehensive accessibility label from available text

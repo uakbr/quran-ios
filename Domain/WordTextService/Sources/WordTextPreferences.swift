@@ -17,11 +17,11 @@ public struct WordTextPreferences {
 
     public static let shared = WordTextPreferences()
 
-    @TransformedPreference(wordTextType, transformer: .rawRepresentable(defaultValue: defaultWordTextType))
+    @TransformedPreference(key: Self.wordTextTypeKey, transformer: .rawRepresentable(defaultValue: Self.defaultWordTextType), defaultValue: Self.defaultWordTextType)
     public var wordTextType: WordTextType
 
     // MARK: Private
 
     private static let defaultWordTextType = WordTextType.translation
-    private static let wordTextType = PreferenceKey<Int>(key: "wordTranslationType", defaultValue: defaultWordTextType.rawValue)
+    private static let wordTextTypeKey = PreferenceKey<Int>(key: "wordTranslationType", transformer: .int)
 }

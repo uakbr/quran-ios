@@ -8,8 +8,9 @@
 //  Copyright (C) 2017  Quran.com
 //
 
-import Combine
+@preconcurrency import Combine
 import Crashing
+import Foundation
 import NetworkSupport
 import Utilities
 import VLogging

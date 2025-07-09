@@ -20,20 +20,20 @@ final class ReviewPersistence {
 
     // MARK: Internal
 
-    @Preference(appOpenedCounter)
+    @Preference(key: Self.appOpenedCounterKey, defaultValue: 0)
     var appOpenedCounter: Int
 
-    @TransformedPreference(appInstalledDate, transformer: dateTransfomer)
+    @TransformedPreference(key: Self.appInstalledDateKey, transformer: Self.dateTransfomer, defaultValue: Date())
     var appInstalledDate: Date
 
-    @TransformedPreference(requestReviewDate, transformer: optionalTransfomer(of: dateTransfomer))
+    @TransformedPreference(key: Self.requestReviewDateKey, transformer: optionalTransfomer(of: Self.dateTransfomer), defaultValue: nil)
     var requestReviewDate: Date?
 
     // MARK: Private
 
-    private static let appOpenedCounter = PreferenceKey<Int>(key: "appOpenedCounter", defaultValue: 0)
-    private static let appInstalledDate = PreferenceKey<TimeInterval>(key: "appInstalledDate", defaultValue: 0)
-    private static let requestReviewDate = PreferenceKey<TimeInterval?>(key: "requestReviewDate", defaultValue: nil)
+    private static let appOpenedCounterKey = PreferenceKey<Int>(key: "appOpenedCounter", transformer: .int)
+    private static let appInstalledDateKey = PreferenceKey<TimeInterval>(key: "appInstalledDate", transformer: .timeInterval)
+    private static let requestReviewDateKey = PreferenceKey<TimeInterval?>(key: "requestReviewDate", transformer: .optionalTimeInterval)
 
     private static let dateTransfomer = PreferenceTransformer<TimeInterval, Date>(
         rawToValue: { Date(timeIntervalSince1970: $0) },

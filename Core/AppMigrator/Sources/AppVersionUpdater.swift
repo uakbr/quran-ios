@@ -38,16 +38,16 @@ struct AppVersionPreferences {
 
     static let shared = AppVersionPreferences()
 
-    @Preference(appVersion)
+    @Preference(key: Self.appVersionKey, defaultValue: nil)
     var appVersion: String?
 
     static func reset() {
-        Preferences.shared.removeValueForKey(appVersion)
+        Self.appVersionKey.removeValueForKey()
     }
 
     // MARK: Private
 
-    private static let appVersion = PreferenceKey<String?>(key: "appVersion", defaultValue: nil)
+    private static let appVersionKey = PreferenceKey<String?>(key: "appVersion", transformer: .optionalString)
 }
 
 struct AppVersionUpdater {

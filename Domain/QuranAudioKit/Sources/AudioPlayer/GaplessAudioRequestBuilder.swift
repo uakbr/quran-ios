@@ -86,11 +86,11 @@ struct GaplessAudioRequestBuilder: QuranAudioRequestBuilder {
     // MARK: Private
 
     private func urlsToPlay(reciter: Reciter, suras: some Collection<Sura>) throws -> [(path: RelativeFilePath, sura: Sura)] {
-        guard case AudioType.gapless = reciter.audioType else {
+        guard case AudioType.gapless(databaseName: _) = reciter.audioType else {
             logger.error("Unsupported reciter type for gapless audio. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
             throw AudioRequestBuilderError.unsupportedReciterType(
                 reciter: reciter,
-                expected: .gapless,
+                expected: .gapless(databaseName: ""),
                 actual: reciter.audioType
             )
         }

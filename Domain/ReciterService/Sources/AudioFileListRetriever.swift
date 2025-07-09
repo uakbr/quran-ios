@@ -39,11 +39,11 @@ private struct GaplessAudioFileListRetriever: AudioFileListRetriever {
     let baseURL: URL
 
     func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) throws -> [ReciterAudioFile] {
-        guard case AudioType.gapless = reciter.audioType else {
+        guard case AudioType.gapless(databaseName: _) = reciter.audioType else {
             logger.error("Unsupported reciter type for gapless audio file retrieval. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
             throw AudioFileListRetrieverError.unsupportedReciterType(
                 reciter: reciter,
-                expected: .gapless,
+                expected: .gapless(databaseName: ""),
                 actual: reciter.audioType,
                 operation: "gapless audio file retrieval"
             )

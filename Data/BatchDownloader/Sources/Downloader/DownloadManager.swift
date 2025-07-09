@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import Locking
 import NetworkSupport
 import SystemDependencies
 import VLogging

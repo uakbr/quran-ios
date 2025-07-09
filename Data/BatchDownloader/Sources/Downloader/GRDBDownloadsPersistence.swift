@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 import SQLitePersistence
 import Utilities
 import VLogging

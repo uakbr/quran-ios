@@ -20,6 +20,8 @@
 
 import Foundation
 
+public typealias Locked<T> = Protected<T>
+
 public class Protected<T> {
     // MARK: Lifecycle
 
@@ -58,6 +60,14 @@ public class Protected<T> {
             try body(&d)
             _data = d
         }
+    }
+    
+    public func withLock<U>(_ body: (inout T) throws -> U) rethrows -> U {
+        try sync(body)
+    }
+    
+    public func withLock(_ body: (inout T) throws -> Void) rethrows {
+        try sync(body)
     }
 
     // MARK: Private

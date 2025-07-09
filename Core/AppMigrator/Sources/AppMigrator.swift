@@ -58,11 +58,12 @@ public final class AppMigrator {
     public func migrate() async {
         let launchVersion = updater.launchVersion()
         logger.notice("Version Update: \(launchVersion)")
+        
+        let updaters = versionUpdaters()
 
         await withTaskGroup(of: Void.self) { taskGroup in
-            let updaters = versionUpdaters()
             for updater in updaters {
-                taskGroup.addTask {
+                taskGroup.addTask { [launchVersion] in
                     await updater.execute(update: launchVersion)
                 }
             }

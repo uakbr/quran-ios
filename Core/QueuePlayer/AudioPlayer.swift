@@ -145,7 +145,7 @@ class AudioPlayer {
     }
 
     private func canPlay() -> Bool {
-        return !request.files.isEmpty && audioPlaying.fileIndex < request.files.count
+        return !request.files.isEmpty && audioPlaying.filePlaying.fileIndex < request.files.count
     }
 
     private func updateAudioPlaying(fileIndex: Int, frameIndex: Int) {

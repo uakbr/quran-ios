@@ -56,22 +56,22 @@ public class ThemeService {
 
     // MARK: Private
 
-    private static let appearanceModeRaw = PreferenceKey<Int?>(key: "theme", defaultValue: nil)
+    private static let appearanceModeRaw = PreferenceKey<Int?>(key: "theme", transformer: .optionalInt)
     private static let appearanceModeTransformer = PreferenceTransformer<Int?, AppearanceMode>(
         rawToValue: { $0.flatMap { AppearanceMode(rawValue: $0) } ?? .auto },
         valueToRaw: { $0.rawValue }
     )
 
-    private static let themeStyleRaw = PreferenceKey<Int?>(key: "themeStyle", defaultValue: nil)
+    private static let themeStyleRaw = PreferenceKey<Int?>(key: "themeStyle", transformer: .optionalInt)
     private static let themeStyleTransformer = PreferenceTransformer<Int?, ThemeStyle>(
         rawToValue: { $0.flatMap { ThemeStyle(rawValue: $0) } ?? .paper },
         valueToRaw: { $0.rawValue }
     )
 
-    @TransformedPreference(appearanceModeRaw, transformer: appearanceModeTransformer)
+    @TransformedPreference(key: Self.appearanceModeRaw, transformer: Self.appearanceModeTransformer, defaultValue: .auto)
     private var preferenceAppearanceMode: AppearanceMode
 
-    @TransformedPreference(themeStyleRaw, transformer: themeStyleTransformer)
+    @TransformedPreference(key: Self.themeStyleRaw, transformer: Self.themeStyleTransformer, defaultValue: .paper)
     private var preferenceThemeStyle: ThemeStyle
 
     private func updateUserInterfaceStyle(themeStyle: ThemeStyle, appearanceMode: AppearanceMode) {

@@ -35,7 +35,7 @@ final class Player {
     var onTimeChanged: (@Sendable @MainActor (Double) -> Void)?
     var onItemCompleted: (@Sendable @MainActor () -> Void)?
 
-    let playerItem: AVPlayerItem
+    var playerItem: AVPlayerItem
     private(set) var currentFileIndex: Int
     private var currentFileURL: URL
 

@@ -19,7 +19,7 @@ public struct WordTextService {
     // MARK: Public
 
     public func textForWord(_ word: Word) async throws -> String? {
-        let textType = preferences.wordTextType
+        let textType = await WordTextPreferences.shared.wordTextType
         let text: String? = switch textType {
         case .translation:
             try await persistence.translationForWord(word)
@@ -31,6 +31,5 @@ public struct WordTextService {
 
     // MARK: Private
 
-    private let preferences = WordTextPreferences.shared
     private let persistence: WordTextPersistence
 }

@@ -30,11 +30,10 @@ public struct Preference<T> {
     }
     
     public var projectedValue: AnyPublisher<T, Never> {
-        key.notifications.observe { _ in
-            self.wrappedValue
-        }
-        .prepend(wrappedValue)
-        .eraseToAnyPublisher()
+        key.notifications
+            .map { _ in self.wrappedValue }
+            .prepend(wrappedValue)
+            .eraseToAnyPublisher()
     }
 
     // MARK: Private
@@ -62,7 +61,7 @@ public struct TransformedPreference<T, V> {
 
     public var wrappedValue: V {
         get {
-            transformer.rawToValue(preference.wrappedValue) ?? defaultValue()
+            transformer.rawToValue(preference.wrappedValue)
         }
         nonmutating set {
             preference.wrappedValue = transformer.valueToRaw(newValue)
@@ -71,7 +70,7 @@ public struct TransformedPreference<T, V> {
     
     public var projectedValue: AnyPublisher<V, Never> {
         preference.projectedValue
-            .compactMap(transformer.rawToValue)
+            .map(transformer.rawToValue)
             .eraseToAnyPublisher()
     }
 

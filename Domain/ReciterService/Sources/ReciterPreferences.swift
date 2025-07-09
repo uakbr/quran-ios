@@ -18,21 +18,21 @@ public class ReciterPreferences {
 
     public static let shared = ReciterPreferences()
 
-    @Preference(lastSelectedReciterId)
+    @Preference(key: Self.lastSelectedReciterIdKey, defaultValue: 41)
     public var lastSelectedReciterId: Int
 
-    @TransformedPreference(recentReciterIds, transformer: recentReciterIdsTransfomer)
+    @TransformedPreference(key: Self.recentReciterIdsKey, transformer: Self.recentReciterIdsTransfomer, defaultValue: OrderedSet<Int>())
     public var recentReciterIds: OrderedSet<Int>
 
     public func reset() {
-        Preferences.shared.removeValueForKey(Self.lastSelectedReciterId)
-        Preferences.shared.removeValueForKey(Self.recentReciterIds)
+        Self.lastSelectedReciterIdKey.removeValueForKey()
+        Self.recentReciterIdsKey.removeValueForKey()
     }
 
     // MARK: Private
 
-    private static let lastSelectedReciterId = PreferenceKey<Int>(key: "LastSelectedQariId", defaultValue: 41)
-    private static let recentReciterIds = PreferenceKey<[Int]>(key: "recentRecitersIdsKey", defaultValue: [])
+    private static let lastSelectedReciterIdKey = PreferenceKey<Int>(key: "LastSelectedQariId", transformer: .int)
+    private static let recentReciterIdsKey = PreferenceKey<[Int]>(key: "recentRecitersIdsKey", transformer: .intArray)
     private static let recentReciterIdsTransfomer = PreferenceTransformer<[Int], OrderedSet<Int>>(
         rawToValue: { OrderedSet($0) },
         valueToRaw: { Array($0) }

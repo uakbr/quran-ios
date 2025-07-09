@@ -19,7 +19,7 @@ public enum SecurePersistenceError: Error {
     // MARK: Public
 
     public static func generalError(_ error: Error, info: String) -> SecurePersistenceError {
-        logger.error("SecurePersistence error: \(error), info: \(info)")
+        keychainLogger.error("SecurePersistence error: \(error), info: \(info)")
         return .persistenceFailed
     }
 }
@@ -121,11 +121,11 @@ public struct KeychainPersistence: SecurePersistence {
             // Item doesn't exist, add it
             let addStatus = keychain.addItem(query: query)
             guard addStatus == errSecSuccess else {
-                logger.error("Failed to add keychain item: \(addStatus)")
+                keychainLogger.error("Failed to add keychain item: \(addStatus)")
                 throw SecurePersistenceError.persistenceFailed
             }
         } else if updateStatus != errSecSuccess {
-            logger.error("Failed to update keychain item: \(updateStatus)")
+            keychainLogger.error("Failed to update keychain item: \(updateStatus)")
             throw SecurePersistenceError.persistenceFailed
         }
     }
@@ -146,7 +146,7 @@ public struct KeychainPersistence: SecurePersistence {
         }
         
         guard status == errSecSuccess else {
-            logger.error("Failed to retrieve keychain item: \(status)")
+            keychainLogger.error("Failed to retrieve keychain item: \(status)")
             throw SecurePersistenceError.retrievalFailed
         }
         
@@ -171,7 +171,7 @@ public struct KeychainPersistence: SecurePersistence {
         }
         
         guard status == errSecSuccess else {
-            logger.error("Failed to delete keychain item: \(status)")
+            keychainLogger.error("Failed to delete keychain item: \(status)")
             throw SecurePersistenceError.persistenceFailed
         }
     }
@@ -192,7 +192,7 @@ public struct KeychainPersistence: SecurePersistence {
         }
         
         guard status == errSecSuccess else {
-            logger.error("Failed to check keychain item existence: \(status)")
+            keychainLogger.error("Failed to check keychain item existence: \(status)")
             throw SecurePersistenceError.retrievalFailed
         }
         
@@ -204,4 +204,4 @@ public struct KeychainPersistence: SecurePersistence {
     private let keychain: any KeychainAccess
 }
 
-private let logger = Logger(subsystem: "SecurePersistence", category: "KeychainPersistence")
+private let keychainLogger = logger

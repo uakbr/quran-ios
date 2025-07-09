@@ -42,7 +42,9 @@ public struct ReciterSizeInfoRetriever: Sendable {
     }
 
     public func getDownloadedSize(for reciter: Reciter, quran: Quran) async -> AudioDownloadedSize {
-        let fileList = reciter.audioFiles(baseURL: baseURL, from: quran.firstVerse, to: quran.lastVerse)
+        guard let fileList = try? reciter.audioFiles(baseURL: baseURL, from: quran.firstVerse, to: quran.lastVerse) else {
+            return .zero(quran: quran)
+        }
 
         guard let fileURLs = try? fileSystem.contentsOfDirectory(at: reciter.localFolder().url, includingPropertiesForKeys: [.fileSizeKey]) else {
             return .zero(quran: quran)
