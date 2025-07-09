@@ -35,22 +35,22 @@ let package = Package(
     products: libraries(from: targets),
     dependencies: [
         // Logging
-        .package(url: "https://github.com/apple/swift-log", from: "1.4.2"),
+        .package(url: "https://github.com/apple/swift-log", from: "1.6.1"),
 
         // Helpers
-        .package(url: "https://github.com/apple/swift-collections", from: "1.0.3"),
+        .package(url: "https://github.com/apple/swift-collections", from: "1.1.4"),
 
         // Zip
-        .package(url: "https://github.com/marmelroy/Zip", from: "2.1.1"),
+        .package(url: "https://github.com/marmelroy/Zip", from: "2.1.2"),
 
         // Database
-        .package(url: "https://github.com/groue/GRDB.swift", from: "6.29.1"),
+        .package(url: "https://github.com/groue/GRDB.swift", from: "6.29.3"),
 
         // Async
-        .package(url: "https://github.com/apple/swift-async-algorithms", from: "0.1.0"),
+        .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.2"),
 
         // OAuth
-        .package(url: "https://github.com/openid/AppAuth-iOS", .upToNextMajor(from: "1.3.0")),
+        .package(url: "https://github.com/openid/AppAuth-iOS", .upToNextMajor(from: "1.7.6")),
 
         // UI
         .package(url: "https://github.com/GenericDataSource/GenericDataSource", from: "3.1.3"),
@@ -59,8 +59,8 @@ let package = Package(
         .package(url: "https://github.com/ninjaprox/NVActivityIndicatorView", from: "5.0.0"),
 
         // Testing
-        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.9.0"),
-        .package(url: "https://github.com/pointfreeco/combine-schedulers", from: "1.0.0"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.17.6"),
+        .package(url: "https://github.com/pointfreeco/combine-schedulers", from: "1.0.2"),
 
     ], targets: validated(targets) + [testTargetLinkingAllPackageTargets(targets)]
 )
