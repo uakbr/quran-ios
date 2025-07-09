@@ -40,7 +40,12 @@ final class NoteEditorViewController: BaseViewController, UIAdaptivePresentation
                 let note = try await viewModel.fetchNote()
                 setNote(note)
             } catch {
-                // TODO: should show error to the user
+                logger.error("Failed to load note: \(error)")
+                showErrorAlert(error: error)
+                // Dismiss the editor since we can't load the note
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.dismiss(animated: true)
+                }
             }
         }
     }
@@ -59,6 +64,8 @@ final class NoteEditorViewController: BaseViewController, UIAdaptivePresentation
             done: { [weak self] in self?.done() },
             delete: { [weak self] in await self?.delete() }
         )
+        .errorAlert(error: $viewModel.error)
+        
         let viewController = UIHostingController(rootView: noteEditor)
         let navigationController = buildNavigationController(rootViewController: viewController, note: note)
         addFullScreenChild(navigationController)

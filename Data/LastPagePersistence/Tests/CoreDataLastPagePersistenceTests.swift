@@ -16,10 +16,10 @@ final class CoreDataLastPagePersistenceTests: XCTestCase {
     var stack: CoreDataStack!
     var subscriptions = Set<AnyCancellable>()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
 
-        stack = CoreDataStack.testingStack()
+        stack = try CoreDataStack.testingStack()
         persistence = CoreDataLastPagePersistence(stack: stack)
     }
 

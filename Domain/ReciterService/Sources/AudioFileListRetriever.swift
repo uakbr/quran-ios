@@ -9,6 +9,21 @@ import Foundation
 import QuranAudio
 import QuranKit
 import Utilities
+import VLogging
+
+public enum AudioFileListRetrieverError: Error, LocalizedError {
+    case unsupportedReciterType(reciter: Reciter, expected: AudioType, actual: AudioType, operation: String)
+    case missingDatabaseConfiguration(reciter: Reciter)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedReciterType(let reciter, let expected, let actual, let operation):
+            return "Unsupported reciter type for \(operation). Reciter '\(reciter.localizedName)' has type '\(actual)' but expected '\(expected)'"
+        case .missingDatabaseConfiguration(let reciter):
+            return "Missing database configuration for reciter: \(reciter.localizedName)"
+        }
+    }
+}
 
 public struct ReciterAudioFile: Sendable, Hashable {
     public var remote: URL
@@ -17,17 +32,28 @@ public struct ReciterAudioFile: Sendable, Hashable {
 }
 
 private protocol AudioFileListRetriever {
-    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) -> [ReciterAudioFile]
+    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) throws -> [ReciterAudioFile]
 }
 
 private struct GaplessAudioFileListRetriever: AudioFileListRetriever {
     let baseURL: URL
 
-    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) -> [ReciterAudioFile] {
+    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) throws -> [ReciterAudioFile] {
+        guard case AudioType.gapless = reciter.audioType else {
+            logger.error("Unsupported reciter type for gapless audio file retrieval. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
+            throw AudioFileListRetrieverError.unsupportedReciterType(
+                reciter: reciter,
+                expected: .gapless,
+                actual: reciter.audioType,
+                operation: "gapless audio file retrieval"
+            )
+        }
+        
         guard let databaseRemoteURL = reciter.databaseRemoteURL(baseURL: baseURL),
               let localDatabasePath = reciter.localZipPath
         else {
-            fatalError("Unsupported reciter type gapped. Only gapless reciters can be downloaded here.")
+            logger.error("Missing database configuration for gapless reciter: \(reciter.localizedName)")
+            throw AudioFileListRetrieverError.missingDatabaseConfiguration(reciter: reciter)
         }
 
         let dbFile = ReciterAudioFile(remote: databaseRemoteURL, local: localDatabasePath)
@@ -47,9 +73,15 @@ private struct GaplessAudioFileListRetriever: AudioFileListRetriever {
 private struct GappedAudioFileListRetriever: AudioFileListRetriever {
     // MARK: Internal
 
-    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) -> [ReciterAudioFile] {
+    func get(for reciter: Reciter, from start: AyahNumber, to end: AyahNumber) throws -> [ReciterAudioFile] {
         guard case AudioType.gapped = reciter.audioType else {
-            fatalError("Unsupported reciter type gapless. Only gapless reciters can be downloaded here.")
+            logger.error("Unsupported reciter type for gapped audio file retrieval. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
+            throw AudioFileListRetrieverError.unsupportedReciterType(
+                reciter: reciter,
+                expected: .gapped,
+                actual: reciter.audioType,
+                operation: "gapped audio file retrieval"
+            )
         }
 
         var files = Set<ReciterAudioFile>()
@@ -73,9 +105,9 @@ private struct GappedAudioFileListRetriever: AudioFileListRetriever {
 }
 
 extension Reciter {
-    public func audioFiles(baseURL: URL, from: AyahNumber, to: AyahNumber) -> [ReciterAudioFile] {
+    public func audioFiles(baseURL: URL, from: AyahNumber, to: AyahNumber) throws -> [ReciterAudioFile] {
         let retriever = retriever(baseURL: baseURL)
-        return retriever.get(for: self, from: from, to: to)
+        return try retriever.get(for: self, from: from, to: to)
     }
 
     private func retriever(baseURL: URL) -> AudioFileListRetriever {

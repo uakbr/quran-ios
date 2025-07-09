@@ -12,9 +12,10 @@ import XCTest
 class CoreDataStackTests: XCTestCase {
     var stack: CoreDataStack!
 
-    override func setUp() {
-        super.setUp()
-        stack = CoreDataStack.testingStack()
+    override func setUp() async throws {
+        try await super.setUp()
+
+        stack = try CoreDataStack.testingStack()
     }
 
     override func tearDown() {

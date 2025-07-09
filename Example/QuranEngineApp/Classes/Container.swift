@@ -17,6 +17,7 @@ import NotePersistence
 import PageBookmarkPersistence
 import ReadingService
 import UIKit
+import VLogging
 
 /// Hosts singleton dependencies
 class Container: AppDependencies {
@@ -65,15 +66,40 @@ class Container: AppDependencies {
 
     // MARK: Private
 
-    private lazy var coreDataStack: CoreDataStack = {
-        let stack = CoreDataStack(name: "Quran", modelUrl: CoreDataModelResources.quranModel) {
-            let lastPage = CoreDataLastPageUniquifier()
-            let pageBookmark = CoreDataPageBookmarkUniquifier()
-            let note = CoreDataNoteUniquifier()
-            return [lastPage, pageBookmark, note]
+    private var _coreDataStack: CoreDataStack?
+    private var coreDataStack: CoreDataStack {
+        if let stack = _coreDataStack {
+            return stack
         }
-        return stack
-    }()
+        
+        do {
+            let stack = try CoreDataStack(name: "Quran", modelUrl: CoreDataModelResources.quranModel) {
+                let lastPage = CoreDataLastPageUniquifier()
+                let pageBookmark = CoreDataPageBookmarkUniquifier()
+                let note = CoreDataNoteUniquifier()
+                return [lastPage, pageBookmark, note]
+            }
+            _coreDataStack = stack
+            return stack
+        } catch {
+            logger.error("Failed to initialize CoreData stack: \(error)")
+            crasher.recordError(error, reason: "CoreData initialization failed")
+            
+            // Create a minimal fallback stack for basic functionality
+            // This should not normally happen, but prevents complete app failure
+            do {
+                let fallbackStack = try CoreDataStack(name: "QuranFallback", modelUrl: CoreDataModelResources.quranModel) {
+                    return [] // No uniquifiers for fallback
+                }
+                _coreDataStack = fallbackStack
+                return fallbackStack
+            } catch {
+                logger.error("Even fallback CoreData stack failed: \(error)")
+                // This is a critical failure - the app cannot function without CoreData
+                fatalError("Critical: Cannot initialize any CoreData stack. App cannot continue.")
+            }
+        }
+    }
 }
 
 private enum Constant {

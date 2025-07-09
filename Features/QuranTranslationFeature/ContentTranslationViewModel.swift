@@ -61,6 +61,7 @@ public final class ContentTranslationViewModel: ObservableObject {
 
     @Published public var showHeaderAndFooter = true
     @Published public var verses: [AyahNumber] = []
+    @Published public var error: Error?
 
     // MARK: Internal
 
@@ -190,8 +191,9 @@ public final class ContentTranslationViewModel: ObservableObject {
 
             scrollToVerseIfNeeded()
         } catch {
-            // TODO: should show error to the user
+            logger.error("Failed to retrieve quran page details for verses \(verses): \(error)")
             crasher.recordError(error, reason: "Failed to retrieve quran page details")
+            self.error = error
         }
     }
 

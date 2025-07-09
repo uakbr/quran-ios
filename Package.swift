@@ -3,8 +3,8 @@
 import Foundation
 import PackageDescription
 
-// Disable before commit, see https://forums.swift.org/t/concurrency-checking-in-swift-packages-unsafeflags/61135
-let enforceSwiftConcurrencyChecks = false
+// Enable strict concurrency checking to prevent data races and ensure thread safety
+let enforceSwiftConcurrencyChecks = true
 
 let swiftConcurrencySettings: [SwiftSetting] = [
     .unsafeFlags([

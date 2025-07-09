@@ -12,6 +12,20 @@ import VLogging
 import WordFramePersistence
 import WordFrameService
 
+public enum ImageDataServiceError: Error, LocalizedError {
+    case imageNotFound(page: Page, path: String)
+    case imageCorrupted(page: Page, path: String)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .imageNotFound(let page, let path):
+            return "Image not found for page \(page.pageNumber) at path: \(path)"
+        case .imageCorrupted(let page, let path):
+            return "Image corrupted for page \(page.pageNumber) at path: \(path)"
+        }
+    }
+}
+
 public struct ImageDataService {
     // MARK: Lifecycle
 
@@ -36,7 +50,8 @@ public struct ImageDataService {
             logFiles(directory: imagesURL) // <reading>/images/width/
             logFiles(directory: imagesURL.deletingLastPathComponent()) // <reading>/images/
             logFiles(directory: imagesURL.deletingLastPathComponent().deletingLastPathComponent()) // <reading>/
-            fatalError("No image found for page '\(page)'")
+            logger.error("No image found for page '\(page)' at path: \(imageURL.path)")
+            throw ImageDataServiceError.imageNotFound(page: page, path: imageURL.path)
         }
 
         // preload the image

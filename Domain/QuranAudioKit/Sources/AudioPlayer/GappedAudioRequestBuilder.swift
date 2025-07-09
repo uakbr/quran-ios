@@ -10,6 +10,18 @@ import QueuePlayer
 import QuranAudio
 import QuranKit
 import Utilities
+import VLogging
+
+public enum AudioRequestBuilderError: Error, LocalizedError {
+    case unsupportedReciterType(reciter: Reciter, expected: AudioType, actual: AudioType)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedReciterType(let reciter, let expected, let actual):
+            return "Unsupported reciter type. Reciter '\(reciter.localizedName)' has type '\(actual)' but expected '\(expected)'"
+        }
+    }
+}
 
 struct GappedAudioRequest: QuranAudioRequest {
     let request: AudioRequest
@@ -44,7 +56,7 @@ final class GappedAudioRequestBuilder: QuranAudioRequestBuilder {
         frameRuns: Runs,
         requestRuns: Runs
     ) async throws -> QuranAudioRequest {
-        let (urls, ayahs) = urlsToPlay(reciter: reciter, from: start, to: end, requestRuns: requestRuns)
+        let (urls, ayahs) = try urlsToPlay(reciter: reciter, from: start, to: end, requestRuns: requestRuns)
         let files = urls.map {
             AudioFile(url: $0.url, frames: [AudioFrame(startTime: 0, endTime: nil)])
         }
@@ -55,9 +67,14 @@ final class GappedAudioRequestBuilder: QuranAudioRequestBuilder {
 
     // MARK: Private
 
-    private func urlsToPlay(reciter: Reciter, from start: AyahNumber, to end: AyahNumber, requestRuns: Runs) -> (urls: [RelativeFilePath], ayahs: [AyahNumber]) {
+    private func urlsToPlay(reciter: Reciter, from start: AyahNumber, to end: AyahNumber, requestRuns: Runs) throws -> (urls: [RelativeFilePath], ayahs: [AyahNumber]) {
         guard case AudioType.gapped = reciter.audioType else {
-            fatalError("Unsupported reciter type gapless. Only gapless reciters can be downloaded here.")
+            logger.error("Unsupported reciter type for gapped audio. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
+            throw AudioRequestBuilderError.unsupportedReciterType(
+                reciter: reciter,
+                expected: .gapped,
+                actual: reciter.audioType
+            )
         }
 
         var urls: [RelativeFilePath] = []

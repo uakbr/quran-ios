@@ -7,6 +7,7 @@
 //
 
 import AnnotationsService
+import Combine
 import Crashing
 import Foundation
 import NoorUI
@@ -19,7 +20,7 @@ public protocol NoteEditorListener: AnyObject {
 }
 
 @MainActor
-final class NoteEditorInteractor {
+final class NoteEditorInteractor: ObservableObject {
     // MARK: Lifecycle
 
     init(noteService: NoteService, note: Note) {
@@ -30,6 +31,8 @@ final class NoteEditorInteractor {
     // MARK: Internal
 
     weak var listener: NoteEditorListener?
+    
+    @Published var error: Error?
 
     var isEditedNote: Bool {
         !(editbleNote?.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -66,8 +69,9 @@ final class NoteEditorInteractor {
             logger.info("NoteEditor: note saved")
             listener?.dismissNoteEditor()
         } catch {
-            // TODO: should show error to the user
+            logger.error("Failed to save note: \(error)")
             crasher.recordError(error, reason: "Failed to set note")
+            self.error = error
         }
     }
 
@@ -78,8 +82,9 @@ final class NoteEditorInteractor {
             logger.info("NoteEditor: notes removed")
             listener?.dismissNoteEditor()
         } catch {
-            // TODO: should show error to the user
+            logger.error("Failed to delete note: \(error)")
             crasher.recordError(error, reason: "Failed to delete note")
+            self.error = error
         }
     }
 

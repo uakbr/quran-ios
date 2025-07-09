@@ -32,19 +32,8 @@ class CoreDataNoteUniquifierTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        stack = CoreDataStack.testingStack()
-        context = stack.newBackgroundContext()
-
-        verse1 = context.newVerse(sura: 1, ayah: 1)
-        verse2 = context.newVerse(sura: 1, ayah: 2)
-        verse3 = context.newVerse(sura: 1, ayah: 3)
-        verse4 = context.newVerse(sura: 1, ayah: 4)
-
-        note1 = context.newNote("Note 1", modifiedOn: 1)
-        note2 = context.newNote("Note 2", modifiedOn: 2)
-        note3 = context.newNote("Note 3", modifiedOn: 3)
-
-        sut = CoreDataNoteUniquifier()
+        stack = try CoreDataStack.testingStack()
+        uniquifier = CoreDataNoteUniquifier()
     }
 
     override func tearDown() {

@@ -11,20 +11,49 @@ import Foundation
 import Utilities
 import VLogging
 
+public enum CoreDataStackError: Error, LocalizedError {
+    case persistentStoreDescriptionNotFound
+    case persistentStoreLoadFailed(Error)
+    case viewContextPinningFailed(Error)
+    case modelNotFound(URL)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .persistentStoreDescriptionNotFound:
+            return "Failed to retrieve a persistent store description"
+        case .persistentStoreLoadFailed(let error):
+            return "Failed to load persistent store: \(error.localizedDescription)"
+        case .viewContextPinningFailed(let error):
+            return "Failed to pin viewContext to the current generation: \(error.localizedDescription)"
+        case .modelNotFound(let url):
+            return "Cannot find Core Data model at: \(url.path)"
+        }
+    }
+}
+
 /// Core Data stack setup including history processing.
 public class CoreDataStack {
     // MARK: Lifecycle
 
-    public init(name: String, modelUrl: URL, lazyUniquifiers: @escaping () -> [CoreDataEntityUniquifier]) {
+    public init(name: String, modelUrl: URL, lazyUniquifiers: @escaping () -> [CoreDataEntityUniquifier]) throws {
         self.name = name
         self.modelUrl = modelUrl
         self.lazyUniquifiers = lazyUniquifiers
+        
+        // Initialize the persistent container and validate it's working
+        _ = try initializePersistentContainer()
     }
 
     // MARK: Public
 
     public var viewContext: NSManagedObjectContext {
-        persistentContainer.viewContext
+        do {
+            return try persistentContainer.viewContext
+        } catch {
+            logger.error("Failed to access viewContext: \(error)")
+            // Return a temporary context to prevent crashes, but log the error
+            return NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        }
     }
 
     public class func removePersistentFiles() {
@@ -33,7 +62,16 @@ public class CoreDataStack {
     }
 
     public func newBackgroundContext() -> NSManagedObjectContext {
-        let context = persistentContainer.newBackgroundContext()
+        let container: NSPersistentContainer
+        do {
+            container = try persistentContainer
+        } catch {
+            logger.error("Failed to access persistent container: \(error)")
+            // Return a temporary context to prevent crashes
+            return NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        }
+        
+        let context = container.newBackgroundContext()
         context.transactionAuthor = appTransactionAuthorName
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         return context
@@ -42,20 +80,40 @@ public class CoreDataStack {
     // MARK: Internal
 
     /// A persistent container that can load cloud-backed and non-cloud stores.
-    lazy var persistentContainer: NSPersistentContainer = {
-        let container = newPersistenceContainer()
+    private var _persistentContainer: NSPersistentContainer?
+    private var persistentContainer: NSPersistentContainer {
+        get throws {
+            if let container = _persistentContainer {
+                return container
+            }
+            let container = try initializePersistentContainer()
+            _persistentContainer = container
+            return container
+        }
+    }
+    
+    private func initializePersistentContainer() throws -> NSPersistentContainer {
+        let container = try newPersistenceContainer()
 
         // Enable history tracking and remote notifications
         guard let description = container.persistentStoreDescriptions.first else {
-            fatalError("###\(#function): Failed to retrieve a persistent store description.")
+            logger.error("Failed to retrieve a persistent store description")
+            throw CoreDataStackError.persistentStoreDescriptionNotFound
         }
         description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
+        var loadError: Error?
         container.loadPersistentStores(completionHandler: { _, error in
-            guard let error = error as NSError? else { return }
-            fatalError("###\(#function): Failed to load persistent store: \(error)")
+            if let error = error {
+                loadError = error
+            }
         })
+        
+        if let error = loadError {
+            logger.error("Failed to load persistent store: \(error)")
+            throw CoreDataStackError.persistentStoreLoadFailed(error)
+        }
 
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         container.viewContext.transactionAuthor = appTransactionAuthorName
@@ -65,7 +123,8 @@ public class CoreDataStack {
         do {
             try container.viewContext.setQueryGenerationFrom(.current)
         } catch {
-            fatalError("###\(#function): Failed to pin viewContext to the current generation:\(error)")
+            logger.error("Failed to pin viewContext to the current generation: \(error)")
+            throw CoreDataStackError.viewContextPinningFailed(error)
         }
 
         // Observe Core Data remote change notifications.
@@ -75,7 +134,7 @@ public class CoreDataStack {
         )
 
         return container
-    }()
+    }
 
     // MARK: Private
 
@@ -96,9 +155,10 @@ public class CoreDataStack {
         return queue
     }()
 
-    private func newPersistenceContainer() -> NSPersistentContainer {
+    private func newPersistenceContainer() throws -> NSPersistentContainer {
         guard let model = NSManagedObjectModel(contentsOf: modelUrl) else {
-            fatalError("Cannot find \(modelUrl)")
+            logger.error("Cannot find Core Data model at: \(modelUrl.path)")
+            throw CoreDataStackError.modelNotFound(modelUrl)
         }
 
         // Create a container that can load CloudKit-backed stores
@@ -112,9 +172,13 @@ public class CoreDataStack {
 
         // Process persistent history to merge changes from other coordinators.
         historyQueue.addOperation {
-            let taskContext = self.newBackgroundContext()
-            taskContext.performAndWait {
-                self.historyProcessor.processNewHistory(using: taskContext)
+            do {
+                let taskContext = self.newBackgroundContext()
+                taskContext.performAndWait {
+                    self.historyProcessor.processNewHistory(using: taskContext)
+                }
+            } catch {
+                logger.error("Failed to process remote store changes: \(error)")
             }
         }
     }

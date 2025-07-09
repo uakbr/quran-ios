@@ -12,6 +12,20 @@ import QuranKit
 import Utilities
 import VLogging
 
+public enum ReciterTimingError: Error, LocalizedError {
+    case gappedRecitersNotSupported(Reciter)
+    case noLocalDatabasePath(Reciter)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .gappedRecitersNotSupported(let reciter):
+            return "Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.localizedName)"
+        case .noLocalDatabasePath(let reciter):
+            return "No local database path found for reciter: \(reciter.localizedName)"
+        }
+    }
+}
+
 public struct ReciterTimingRetriever {
     // MARK: Lifecycle
 
@@ -45,7 +59,12 @@ public struct ReciterTimingRetriever {
 
     private func retrieveTiming(for reciter: Reciter, suras: [Sura]) async throws -> [Sura: SuraTiming] {
         guard let filePath = reciter.localDatabasePath else {
-            fatalError("Gapped reciters are not supported.")
+            logger.error("Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.localizedName)")
+            if case .gapped = reciter.audioType {
+                throw ReciterTimingError.gappedRecitersNotSupported(reciter)
+            } else {
+                throw ReciterTimingError.noLocalDatabasePath(reciter)
+            }
         }
         let persistence = persistenceFactory(filePath.url)
 

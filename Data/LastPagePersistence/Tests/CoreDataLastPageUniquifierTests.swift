@@ -29,18 +29,8 @@ class CoreDataLastPageUniquifierTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        stack = CoreDataStack.testingStack()
-        context = stack.newBackgroundContext()
-
-        entity1 = context.newLastPage(page: 45, modifiedOn: 1)
-        entity2 = context.newLastPage(page: 500, modifiedOn: 2)
-        entity3 = context.newLastPage(page: 100, modifiedOn: 3)
-        entity4 = context.newLastPage(page: 250, modifiedOn: 4)
-        entity5 = context.newLastPage(page: 190, modifiedOn: 5)
-
-        try context.save()
-
-        sut = CoreDataLastPageUniquifier()
+        stack = try CoreDataStack.testingStack()
+        uniquifier = CoreDataLastPageUniquifier()
     }
 
     override func tearDown() {

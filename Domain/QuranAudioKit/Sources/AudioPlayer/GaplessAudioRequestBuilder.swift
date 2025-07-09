@@ -12,6 +12,7 @@ import QuranAudio
 import QuranKit
 import QuranTextKit
 import Utilities
+import VLogging
 
 struct GaplessAudioRequest: QuranAudioRequest {
     let request: AudioRequest
@@ -48,7 +49,7 @@ struct GaplessAudioRequestBuilder: QuranAudioRequestBuilder {
         requestRuns: Runs
     ) async throws -> QuranAudioRequest {
         let range = try await timingRetriever.timing(for: reciter, from: start, to: end)
-        let surasPaths = urlsToPlay(reciter: reciter, suras: range.timings.keys)
+        let surasPaths = try urlsToPlay(reciter: reciter, suras: range.timings.keys)
 
         var files: [AudioFile] = []
         var ayahs: [[AyahNumber]] = []
@@ -84,9 +85,14 @@ struct GaplessAudioRequestBuilder: QuranAudioRequestBuilder {
 
     // MARK: Private
 
-    private func urlsToPlay(reciter: Reciter, suras: some Collection<Sura>) -> [(path: RelativeFilePath, sura: Sura)] {
+    private func urlsToPlay(reciter: Reciter, suras: some Collection<Sura>) throws -> [(path: RelativeFilePath, sura: Sura)] {
         guard case AudioType.gapless = reciter.audioType else {
-            fatalError("Unsupported reciter type gapped. Only gapless reciters can be played here.")
+            logger.error("Unsupported reciter type for gapless audio. Reciter: \(reciter.localizedName), Type: \(reciter.audioType)")
+            throw AudioRequestBuilderError.unsupportedReciterType(
+                reciter: reciter,
+                expected: .gapless,
+                actual: reciter.audioType
+            )
         }
 
         // loop over the files

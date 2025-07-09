@@ -46,6 +46,7 @@ class ContentImageViewModel: ObservableObject {
     @Published var ayahNumberLocations: [AyahNumberLocation] = []
     @Published var highlights: QuranHighlights
     @Published var scrollToVerse: AyahNumber?
+    @Published var error: Error?
 
     @Published var scale: WordFrameScale = .zero
     @Published var imageFrame: CGRect = .zero
@@ -84,8 +85,9 @@ class ContentImageViewModel: ObservableObject {
 
             scrollToVerseIfNeeded()
         } catch {
-            // TODO: should show error to the user
+            logger.error("Failed to retrieve quran image details for page \(page): \(error)")
             crasher.recordError(error, reason: "Failed to retrieve quran image details")
+            self.error = error
         }
     }
 
