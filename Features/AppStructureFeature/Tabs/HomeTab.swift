@@ -48,10 +48,14 @@ private final class HomeTabInteractor: TabInteractor {
 
 private final class HomeTabViewController: TabViewController {
     override func getTabBarItem() -> UITabBarItem {
-        UITabBarItem(
+        let item = UITabBarItem(
             title: "\(lAndroid("quran_sura")) / \(lAndroid("quran_juz2"))",
             image: .symbol("doc.text"),
             selectedImage: .symbol("doc.text.fill")
         )
+        item.accessibilityLabel = "Home"
+        item.accessibilityHint = "Browse Quran suras and juzs"
+        item.accessibilityIdentifier = "HomeTab"
+        return item
     }
 }

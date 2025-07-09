@@ -47,6 +47,14 @@ private final class SearchTabInteractor: TabInteractor {
 
 private class SearchTabViewController: TabViewController {
     override func getTabBarItem() -> UITabBarItem {
-        UITabBarItem(tabBarSystemItem: .search, tag: 0)
+        let item = UITabBarItem(
+            title: l("tab.search"),
+            image: .symbol("magnifyingglass"),
+            selectedImage: .symbol("magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(weight: .bold))
+        )
+        item.accessibilityLabel = "Search"
+        item.accessibilityHint = "Search through Quran text"
+        item.accessibilityIdentifier = "SearchTab"
+        return item
     }
 }

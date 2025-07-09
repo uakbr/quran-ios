@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 
+@MainActor
 public final class Preferences {
     // MARK: Lifecycle
 
@@ -17,7 +18,7 @@ public final class Preferences {
 
     // MARK: Public
 
-    public static var shared = Preferences(userDefaults: .standard)
+    public static let shared = Preferences(userDefaults: .standard)
 
     public var notifications: AnyPublisher<String, Never> {
         notificationsSubject.eraseToAnyPublisher()

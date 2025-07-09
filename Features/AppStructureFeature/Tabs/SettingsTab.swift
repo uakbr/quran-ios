@@ -51,10 +51,14 @@ private final class SettingsTabInteractor: TabInteractor {
 
 private class SettingsTabViewController: TabViewController {
     override func getTabBarItem() -> UITabBarItem {
-        UITabBarItem(
+        let item = UITabBarItem(
             title: lAndroid("menu_settings"),
-            image: NoorImage.settings.uiImage,
-            selectedImage: NoorImage.settingsFilled.uiImage
+            image: .symbol("gearshape"),
+            selectedImage: .symbol("gearshape.fill")
         )
+        item.accessibilityLabel = "Settings"
+        item.accessibilityHint = "Adjust app preferences and settings"
+        item.accessibilityIdentifier = "SettingsTab"
+        return item
     }
 }

@@ -5,12 +5,12 @@
 //  Created by Mohamed Afifi on 2022-09-10.
 //
 
-public struct PreferenceTransformer<Raw, T> {
+public struct PreferenceTransformer<Raw, T>: Sendable {
     // MARK: Lifecycle
 
     public init(
-        rawToValue: @escaping (Raw) -> T,
-        valueToRaw: @escaping (T) -> Raw
+        rawToValue: @escaping @Sendable (Raw) -> T,
+        valueToRaw: @escaping @Sendable (T) -> Raw
     ) {
         self.rawToValue = rawToValue
         self.valueToRaw = valueToRaw
@@ -18,12 +18,12 @@ public struct PreferenceTransformer<Raw, T> {
 
     // MARK: Public
 
-    public let rawToValue: (Raw) -> T
-    public let valueToRaw: (T) -> Raw
+    public let rawToValue: @Sendable (Raw) -> T
+    public let valueToRaw: @Sendable (T) -> Raw
 }
 
 extension PreferenceTransformer where T: RawRepresentable, T.RawValue == Raw {
-    public static func rawRepresentable(defaultValue: @escaping @autoclosure () -> T) -> Self {
+    public static func rawRepresentable(defaultValue: @escaping @autoclosure @Sendable () -> T) -> Self {
         PreferenceTransformer(
             rawToValue: { T(rawValue: $0) ?? defaultValue() },
             valueToRaw: { $0.rawValue }

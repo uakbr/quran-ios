@@ -8,6 +8,7 @@
 import OrderedCollections
 import Preferences
 
+@MainActor
 public class ReciterPreferences {
     // MARK: Lifecycle
 

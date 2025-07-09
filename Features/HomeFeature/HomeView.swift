@@ -47,63 +47,77 @@ private struct HomeViewUI: View {
         NoorList {
             NoorSection(title: lAndroid("recent_pages"), lastPages) { lastPage in
                 lastPageView(lastPage)
+                    .accessibilityIdentifier("recent_page_\(lastPage.page.pageNumber)")
             }
 
             switch type {
             case .suras:
                 sectionsView(items: suras, groupBy: \.page.startJuz) { sura in
                     suraView(sura)
+                        .accessibilityIdentifier("sura_\(sura.suraNumber)")
                 }
             case .juzs:
                 sectionsView(items: quarters, groupBy: \.quarter.juz) { quarter in
                     quarterView(quarter)
+                        .accessibilityIdentifier("quarter_\(quarter.quarter.juz)_\(quarter.quarter.quarter)")
                 }
             }
         }
         .task { await start() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Quran navigation")
+        .accessibilityHint("Browse suras, juzs, and recent pages")
     }
 
-    func lastPageView(_ lastPage: LastPage) -> some View {
+    @ViewBuilder
+    private func lastPageView(_ lastPage: LastPage) -> some View {
         let ayah = lastPage.page.firstVerse
         return NoorListItem(
             image: .init(.lastPage, color: .secondaryLabel),
             title: "\(ayah.sura.localizedName()) \(sura: ayah.sura.arabicSuraName)",
             subtitle: .init(text: lastPage.createdOn.timeAgo(), location: .bottom),
-            accessory: .text(NumberFormatter.shared.format(lastPage.page.pageNumber))
-        ) {
-            selectLastPage(lastPage.page)
-        }
+            accessory: .text(NumberFormatter.shared.format(lastPage.page.pageNumber)),
+            action: { selectLastPage(lastPage.page) }
+        )
+        .accessibilityLabel("Recent page: \(ayah.sura.localizedName()), page \(lastPage.page.pageNumber)")
+        .accessibilityHint("Double tap to continue reading from this page")
+        .accessibilityValue("Last read \(lastPage.createdOn.timeAgo())")
     }
 
-    func suraView(_ sura: Sura) -> some View {
+    @ViewBuilder
+    private func suraView(_ sura: Sura) -> some View {
         let ayahsString = lFormat("verses", table: .android, sura.verses.count)
         let suraType = sura.isMakki ? lAndroid("makki") : lAndroid("madani")
-
         let numberFormatter = NumberFormatter.shared
-
+        
         return NoorListItem(
             title: "\(sura.localizedName(withNumber: true)) \(sura: sura.arabicSuraName)",
             subtitle: .init(text: "\(suraType) - \(ayahsString)", location: .bottom),
-            accessory: .text(numberFormatter.format(sura.page.pageNumber))
-        ) {
-            selectSura(sura)
-        }
+            accessory: .text(numberFormatter.format(sura.page.pageNumber)),
+            action: { selectSura(sura) }
+        )
+        .accessibilityLabel("Sura \(sura.suraNumber): \(sura.localizedName())")
+        .accessibilityHint("Double tap to read this sura")
+        .accessibilityValue("\(suraType), \(ayahsString), starts on page \(sura.page.pageNumber)")
     }
 
-    func quarterView(_ item: QuarterItem) -> some View {
+    @ViewBuilder
+    private func quarterView(_ item: QuarterItem) -> some View {
         let quarter = item.quarter
         let ayah = quarter.firstVerse
         let page = ayah.page
         let localizedVerse = ayah.localizedName
         let arabicSuraName = ayah.sura.arabicSuraName
-
+        
         return NoorListItem(
             title: "\(quarter.localizedName) - \(localizedVerse) \(sura: arabicSuraName)",
             rightSubtitle: "\(verse: item.ayahText, color: .clear, lineLimit: 1)",
-            accessory: .text(NumberFormatter.shared.format(page.pageNumber))
-        ) {
-            selectQuarter(item)
-        }
+            accessory: .text(NumberFormatter.shared.format(page.pageNumber)),
+            action: { selectQuarter(item) }
+        )
+        .accessibilityLabel("Juz \(quarter.juz), quarter \(quarter.quarter)")
+        .accessibilityHint("Double tap to read from this location")
+        .accessibilityValue("\(localizedVerse), starts on page \(page.pageNumber)")
     }
 
     @ViewBuilder

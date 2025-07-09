@@ -48,10 +48,14 @@ private final class BookmarksTabInteractor: TabInteractor {
 
 private class BookmarksTabViewController: TabViewController {
     override func getTabBarItem() -> UITabBarItem {
-        UITabBarItem(
-            title: lAndroid("menu_bookmarks"),
+        let item = UITabBarItem(
+            title: l("tab.bookmarks"),
             image: .symbol("bookmark"),
             selectedImage: .symbol("bookmark.fill")
         )
+        item.accessibilityLabel = "Bookmarks"
+        item.accessibilityHint = "View and manage your bookmarked pages"
+        item.accessibilityIdentifier = "BookmarksTab"
+        return item
     }
 }

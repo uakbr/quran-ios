@@ -8,8 +8,8 @@
 import SwiftUI
 
 final class CollectionViewController<
-    SectionId: Hashable,
-    Item: Identifiable & Hashable,
+    SectionId: Hashable & Sendable,
+    Item: Identifiable & Hashable & Sendable,
     ItemContent: View
 >: UIViewController, UICollectionViewDelegate {
     typealias CellType = HostingCollectionViewCell<ItemContent>

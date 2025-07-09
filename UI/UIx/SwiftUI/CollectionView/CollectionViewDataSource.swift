@@ -8,8 +8,8 @@
 import UIKit
 
 final class CollectionViewDataSource<
-    SectionId: Hashable,
-    Item: Identifiable & Hashable
+    SectionId: Hashable & Sendable,
+    Item: Identifiable & Hashable & Sendable
 >: UICollectionViewDiffableDataSource<SectionId, Item.ID> {
     // MARK: Internal
 

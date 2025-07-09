@@ -15,6 +15,7 @@ public class RecentRecitersService {
 
     // MARK: Public
 
+    @MainActor
     public func recentReciters(_ allReciters: [Reciter]) -> [Reciter] {
         var recentReciters: [Reciter] = []
         for recentReciterId in preferences.recentReciterIds {
@@ -26,6 +27,7 @@ public class RecentRecitersService {
         return recentReciters
     }
 
+    @MainActor
     public func updateRecentRecitersList(_ reciter: Reciter) {
         var recentReciterIds = preferences.recentReciterIds
 

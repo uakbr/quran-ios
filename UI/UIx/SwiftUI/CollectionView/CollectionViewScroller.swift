@@ -10,8 +10,8 @@ import VLogging
 
 @MainActor
 final class CollectionViewScroller<
-    SectionId: Hashable,
-    Item: Identifiable & Hashable
+    SectionId: Hashable & Sendable,
+    Item: Identifiable & Hashable & Sendable
 > {
     init(collectionView: UICollectionView) {
         scrollToItemHelper = CollectionViewScrollToItemHelper(collectionView: collectionView)

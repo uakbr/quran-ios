@@ -48,10 +48,14 @@ private final class NotesTabInteractor: TabInteractor {
 
 private class NotesTabViewController: TabViewController {
     override func getTabBarItem() -> UITabBarItem {
-        UITabBarItem(
+        let item = UITabBarItem(
             title: l("tab.notes"),
-            image: .symbol("text.badge.star"),
-            selectedImage: .symbol("text.badge.star", withConfiguration: UIImage.SymbolConfiguration(weight: .bold))
+            image: .symbol("note"),
+            selectedImage: .symbol("note.text")
         )
+        item.accessibilityLabel = "Notes"
+        item.accessibilityHint = "View and manage your Quran notes"
+        item.accessibilityIdentifier = "NotesTab"
+        return item
     }
 }

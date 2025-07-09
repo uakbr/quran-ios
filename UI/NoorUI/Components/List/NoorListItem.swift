@@ -97,13 +97,20 @@ public struct NoorListItem: View {
                 // Use Tap gesture since tapping accessory button will also trigger the whole cell selection.
                 content
                     .onAsyncTapGesture(asyncAction: action)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAction(.default) { await action() }
+                    .accessibilityAddTraits(.isButton)
             } else {
                 AsyncButton(action: action) {
                     content
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityAction(.default) { await action() }
+                .accessibilityAddTraits(.isButton)
             }
         } else {
             content
+                .accessibilityElement(children: .combine)
         }
     }
 
@@ -121,6 +128,100 @@ public struct NoorListItem: View {
     let _action: AsyncAction?
 
     // MARK: Private
+
+    @ViewBuilder
+    private var content: some View {
+        HStack {
+            leadingEdge
+            
+            if let image {
+                itemImage(image)
+                    .accessibilityHidden(true) // Hide decorative images
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                headerContent
+                titleContent
+                subtitleContent
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            if subtitle?.location == .trailing || accessory != nil {
+                Spacer()
+                
+                if let subtitle, subtitle.location == .trailing {
+                    subtitleView(subtitle, textFont: .body)
+                }
+                
+                if let accessory {
+                    accessoryView(accessory)
+                }
+            }
+        }
+        .foregroundColor(.primary)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(accessibilityHint)
+        .accessibilityValue(accessibilityValue)
+    }
+    
+    @ViewBuilder
+    private var leadingEdge: some View {
+        if let leadingEdgeLineColor {
+            leadingEdgeLineColor
+                .frame(width: 4)
+        }
+    }
+    
+    // MARK: - Accessibility Support
+    
+    private var accessibilityLabel: String {
+        var components: [String] = []
+        
+        if let heading = heading {
+            components.append(heading)
+        }
+        
+        components.append(title.string)
+        
+        if let subheading = subheading {
+            components.append(subheading.string)
+        }
+        
+        return components.joined(separator: ", ")
+    }
+    
+    private var accessibilityHint: String? {
+        if _action != nil {
+            return "Double tap to select"
+        }
+        return nil
+    }
+    
+    private var accessibilityValue: String? {
+        var components: [String] = []
+        
+        if let rightPretitle = rightPretitle {
+            components.append(rightPretitle.string)
+        }
+        
+        if let rightSubtitle = rightSubtitle {
+            components.append(rightSubtitle.string)
+        }
+        
+        if let subtitle = subtitle {
+            if let label = subtitle.label {
+                components.append("\(label)\(subtitle.text)")
+            } else {
+                components.append(subtitle.text)
+            }
+        }
+        
+        return components.isEmpty ? nil : components.joined(separator: ", ")
+    }
 
     private var action: AsyncAction? {
         guard let _action else {
@@ -141,87 +242,77 @@ public struct NoorListItem: View {
         }
     }
 
-    private var content: some View {
-        HStack {
-            if let leadingEdgeLineColor {
-                leadingEdgeLineColor
-                    .frame(width: 4)
-            }
+    @ViewBuilder
+    private func itemImage(_ image: ItemImage) -> some View {
+        if let color = image.color {
+            image.image.image
+                .foregroundColor(color)
+        } else {
+            image.image.image
+        }
+    }
 
-            if let image {
-                if let color = image.color {
-                    image.image.image
-                        .foregroundColor(color)
-                } else {
-                    image.image.image
-                }
-            }
+    @ViewBuilder
+    private func headerContent: some View {
+        if let heading {
+            Text(heading)
+                .foregroundColor(.accentColor)
+        }
+    }
 
-            VStack(alignment: .leading) {
-                if let heading {
-                    Text(heading)
-                        .foregroundColor(.accentColor)
-                }
+    @ViewBuilder
+    private func titleContent: some View {
+        if let subheading {
+            subheading.view(ofSize: .caption)
+                .foregroundColor(Color.secondaryLabel)
+        }
 
-                if let subheading {
-                    subheading.view(ofSize: .caption)
-                        .foregroundColor(Color.secondaryLabel)
-                }
-
-                if let rightPretitle {
-                    HStack {
-                        rightPretitle.view(ofSize: .body)
-                        Spacer()
-                    }
-                    .environment(\.layoutDirection, .rightToLeft)
-                }
-
-                title.view(ofSize: .body)
-
-                if let rightSubtitle {
-                    HStack {
-                        rightSubtitle.view(ofSize: .caption)
-                            .foregroundColor(.secondaryLabel)
-                        Spacer()
-                    }
-                    .environment(\.layoutDirection, .rightToLeft)
-                }
-
-                if let subtitle, subtitle.location == .bottom {
-                    subtitleView(subtitle, textFont: .footnote)
-                }
-            }
-
-            if subtitle?.location == .trailing || accessory != nil {
+        if let rightPretitle {
+            HStack {
+                rightPretitle.view(ofSize: .body)
                 Spacer()
+            }
+            .environment(\.layoutDirection, .rightToLeft)
+        }
 
-                if let subtitle, subtitle.location == .trailing {
-                    subtitleView(subtitle, textFont: .body)
-                }
+        title.view(ofSize: .body)
+    }
 
-                if let accessory {
-                    switch accessory {
-                    case .text(let text):
-                        Text(text)
-                            .foregroundColor(.secondaryLabel)
-                            .fontWeight(.light)
-                    case .disclosureIndicator:
-                        DisclosureIndicator()
-                    case let .download(type, action):
-                        AppStoreDownloadButton(type: type, action: action)
-                    case let .image(image, color):
-                        if let color {
-                            image.image
-                                .foregroundColor(color)
-                        } else {
-                            image.image
-                        }
-                    }
-                }
+    @ViewBuilder
+    private func subtitleContent: some View {
+        if let rightSubtitle {
+            HStack {
+                rightSubtitle.view(ofSize: .caption)
+                    .foregroundColor(.secondaryLabel)
+                Spacer()
+            }
+            .environment(\.layoutDirection, .rightToLeft)
+        }
+
+        if let subtitle, subtitle.location == .bottom {
+            subtitleView(subtitle, textFont: .footnote)
+        }
+    }
+
+    @ViewBuilder
+    private func accessoryView(_ accessory: Accessory) -> some View {
+        switch accessory {
+        case .text(let text):
+            Text(text)
+                .foregroundColor(.secondaryLabel)
+                .fontWeight(.light)
+        case .disclosureIndicator:
+            DisclosureIndicator()
+        case let .download(type, action):
+            AppStoreDownloadButton(type: type, action: action)
+        case let .image(image, color):
+            if let color {
+                image.image
+                    .foregroundColor(color)
+            } else {
+                image.image
             }
         }
-        .foregroundColor(.primary)
-        .contentShape(Rectangle())
     }
 
     @ViewBuilder

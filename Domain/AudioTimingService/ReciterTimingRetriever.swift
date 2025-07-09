@@ -13,15 +13,15 @@ import Utilities
 import VLogging
 
 public enum ReciterTimingError: Error, LocalizedError {
-    case gappedRecitersNotSupported(Reciter)
+    case gappedReciterNotSupported(Reciter)
     case noLocalDatabasePath(Reciter)
     
     public var errorDescription: String? {
         switch self {
-        case .gappedRecitersNotSupported(let reciter):
-            return "Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.localizedName)"
+        case .gappedReciterNotSupported(let reciter):
+            return "Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.nameKey)"
         case .noLocalDatabasePath(let reciter):
-            return "No local database path found for reciter: \(reciter.localizedName)"
+            return "No local database path found for reciter: \(reciter.nameKey)"
         }
     }
 }
@@ -59,9 +59,9 @@ public struct ReciterTimingRetriever {
 
     private func retrieveTiming(for reciter: Reciter, suras: [Sura]) async throws -> [Sura: SuraTiming] {
         guard let filePath = reciter.localDatabasePath else {
-            logger.error("Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.localizedName)")
+            logger.error("Gapped reciters are not supported for timing retrieval. Reciter: \(reciter.nameKey)")
             if case .gapped = reciter.audioType {
-                throw ReciterTimingError.gappedRecitersNotSupported(reciter)
+                throw ReciterTimingError.gappedReciterNotSupported(reciter)
             } else {
                 throw ReciterTimingError.noLocalDatabasePath(reciter)
             }

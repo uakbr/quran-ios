@@ -4,8 +4,8 @@ import Foundation
 import PackageDescription
 
 // Enable strict concurrency checking to prevent data races and ensure thread safety
-// Temporarily disabled to fix build issues, will re-enable after addressing concurrency warnings
-let enforceSwiftConcurrencyChecks = false
+// CRITICAL: Strict concurrency is essential for app security and stability
+let enforceSwiftConcurrencyChecks = true
 
 let swiftConcurrencySettings: [SwiftSetting] = [
     .unsafeFlags([
