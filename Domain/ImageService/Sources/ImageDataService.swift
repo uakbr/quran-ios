@@ -11,6 +11,7 @@ import UIKit
 import VLogging
 import WordFramePersistence
 import WordFrameService
+import Caching
 
 public enum ImageDataServiceError: Error, LocalizedError {
     case imageNotFound(page: Page, path: String)
@@ -32,6 +33,10 @@ public struct ImageDataService {
     public init(ayahInfoDatabase: URL, imagesURL: URL) {
         self.imagesURL = imagesURL
         persistence = GRDBWordFramePersistence(fileURL: ayahInfoDatabase)
+        
+        // Configure image cache with memory limits using our custom Cache
+        imageCache.countLimit = 50 // Limit to 50 cached images
+        imageCache.name = "ImagePageCache"
     }
 
     // MARK: Public
@@ -45,21 +50,27 @@ public struct ImageDataService {
     }
 
     public func imageForPage(_ page: Page) async throws -> ImagePage {
-        let imageURL = imageURLForPage(page)
-        guard let image = UIImage(contentsOfFile: imageURL.path) else {
-            logFiles(directory: imagesURL) // <reading>/images/width/
-            logFiles(directory: imagesURL.deletingLastPathComponent()) // <reading>/images/
-            logFiles(directory: imagesURL.deletingLastPathComponent().deletingLastPathComponent()) // <reading>/
-            logger.error("No image found for page '\(page)' at path: \(imageURL.path)")
-            throw ImageDataServiceError.imageNotFound(page: page, path: imageURL.path)
+        // Check cache first
+        let cacheKey = "page_\(page.pageNumber)_\(page.quran.rawValue)"
+        if let cachedImagePage = imageCache.object(forKey: cacheKey) {
+            return cachedImagePage
         }
-
-        // preload the image
-        let unloadedImage: UIImage = image
-        let preloadedImage = preloadImage(unloadedImage)
-
-        let wordFrames = try await wordFrames(page)
-        return ImagePage(image: preloadedImage, wordFrames: wordFrames, startAyah: page.firstVerse)
+        
+        // Load on background queue for better performance
+        return try await withCheckedThrowingContinuation { continuation in
+            Task.detached(priority: .userInitiated) {
+                do {
+                    let imagePage = try await self.loadImagePageFromDisk(page)
+                    
+                    // Cache the result
+                    self.imageCache.setObject(imagePage, forKey: cacheKey)
+                    
+                    continuation.resume(returning: imagePage)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     // MARK: Internal
@@ -75,6 +86,61 @@ public struct ImageDataService {
     private let processor = WordFrameProcessor()
     private let persistence: WordFramePersistence
     private let imagesURL: URL
+    private let imageCache = Cache<String, ImagePage>()
+
+    private func loadImagePageFromDisk(_ page: Page) async throws -> ImagePage {
+        let imageURL = imageURLForPage(page)
+        guard let image = UIImage(contentsOfFile: imageURL.path) else {
+            logFiles(directory: imagesURL) // <reading>/images/width/
+            logFiles(directory: imagesURL.deletingLastPathComponent()) // <reading>/images/
+            logFiles(directory: imagesURL.deletingLastPathComponent().deletingLastPathComponent()) // <reading>/
+            logger.error("No image found for page '\(page)' at path: \(imageURL.path)")
+            throw ImageDataServiceError.imageNotFound(page: page, path: imageURL.path)
+        }
+
+        // Memory-efficient image processing
+        let optimizedImage = await optimizeImageForMemory(image)
+        let wordFrames = try await wordFrames(page)
+        
+        return ImagePage(image: optimizedImage, wordFrames: wordFrames, startAyah: page.firstVerse)
+    }
+    
+    private func optimizeImageForMemory(_ image: UIImage) async -> UIImage {
+        return await withCheckedContinuation { continuation in
+            // Process on background queue to avoid blocking main thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Decompress image to avoid repeated decompression during rendering
+                let decompressedImage = self.decompressImage(image)
+                continuation.resume(returning: decompressedImage)
+            }
+        }
+    }
+    
+    private func decompressImage(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+        )
+        
+        guard let context = context else { return image }
+        
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        guard let decompressedCGImage = context.makeImage() else { return image }
+        
+        return UIImage(cgImage: decompressedCGImage, scale: image.scale, orientation: image.imageOrientation)
+    }
 
     private func logFiles(directory: URL) {
         let fileManager = FileManager.default
@@ -85,50 +151,5 @@ public struct ImageDataService {
 
     private func imageURLForPage(_ page: Page) -> URL {
         imagesURL.appendingPathComponent("page\(page.pageNumber.as3DigitString()).png")
-    }
-
-    private func preloadImage(_ imageToPreload: UIImage, cropInsets: UIEdgeInsets = .zero) -> UIImage {
-        let targetImage: CGImage?
-        if let cgImage = imageToPreload.cgImage {
-            targetImage = cgImage
-        } else if let ciImage = imageToPreload.ciImage {
-            let context = CIContext(options: nil)
-            targetImage = context.createCGImage(ciImage, from: ciImage.extent)
-        } else {
-            targetImage = nil
-        }
-        guard var cgimg = targetImage else {
-            return imageToPreload
-        }
-
-        let rect = CGRect(x: 0, y: 0, width: cgimg.width, height: cgimg.height)
-        let croppedRect = rect.inset(by: cropInsets)
-        let cropped = cgimg.cropping(to: croppedRect)
-        cgimg = cropped ?? cgimg
-
-        // make a bitmap context of a suitable size to draw to, forcing decode
-        let width = cgimg.width
-        let height = cgimg.height
-
-        let colourSpace = CGColorSpaceCreateDeviceRGB()
-        let imageContext = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: colourSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        )
-
-        // draw the image to the context, release it
-        imageContext?.draw(cgimg, in: CGRect(x: 0, y: 0, width: width, height: height))
-
-        // now get an image ref from the context
-        if let outputImage = imageContext?.makeImage() {
-            let cachedImage = UIImage(cgImage: outputImage)
-            return cachedImage
-        }
-        return imageToPreload
     }
 }

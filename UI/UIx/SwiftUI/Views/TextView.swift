@@ -1,8 +1,13 @@
-// Copied from https://gist.github.com/shaps80/8a3170160f80cfdc6e8179fa0f5e1621
+//
+//  TextView.swift
+//  
+//
+//  Migrated from UIViewRepresentable to native SwiftUI.TextEditor for better performance
+//
 
 import SwiftUI
 
-// TODO: Use SwiftUI.TextEditor
+/// A SwiftUI text editor that provides multiline text editing capabilities
 public struct TextView: View {
     // MARK: Lifecycle
 
@@ -14,11 +19,23 @@ public struct TextView: View {
     // MARK: Public
 
     public var body: some View {
-        SwiftUITextView(
-            text: $text,
-            editing: $editing,
-            font: font
-        )
+        TextEditor(text: $text)
+            .font(font)
+            .background(Color.clear)
+            .onTapGesture {
+                if !editing {
+                    editing = true
+                }
+            }
+            .onChange(of: editing) { isEditing in
+                // Handle editing state changes if needed
+                if isEditing {
+                    // Focus the text editor
+                    DispatchQueue.main.async {
+                        // TextEditor automatically handles focus in SwiftUI
+                    }
+                }
+            }
     }
 
     // MARK: Internal
@@ -28,73 +45,22 @@ public struct TextView: View {
 
     // MARK: Private
 
-    private var font: UIFont = UIFont.preferredFont(forTextStyle: .body)
+    private var font: Font = .body
 }
 
+// MARK: - Modifiers
+
 extension TextView {
-    func font(_ textStyle: UIFont.TextStyle) -> Self {
-        font(UIFont.preferredFont(forTextStyle: textStyle))
+    /// Set the font using SwiftUI's text style
+    public func font(_ textStyle: Font.TextStyle) -> Self {
+        font(.system(textStyle))
     }
 
-    func font(_ font: UIFont) -> Self {
+    /// Set a custom font
+    public func font(_ font: Font) -> Self {
         var view = self
         view.font = font
         return view
-    }
-}
-
-private struct SwiftUITextView: UIViewRepresentable {
-    class Coordinator: NSObject, UITextViewDelegate {
-        // MARK: Lifecycle
-
-        init(_ textView: SwiftUITextView) {
-            parent = textView
-        }
-
-        // MARK: Internal
-
-        var parent: SwiftUITextView
-
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text
-        }
-
-        func textViewDidBeginEditing(_ textView: UITextView) {
-            parent.editing = true
-        }
-
-        func textViewDidEndEditing(_ textView: UITextView) {
-            parent.editing = false
-        }
-    }
-
-    @Binding var text: String
-    @Binding var editing: Bool
-    let font: UIFont
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
-        textView.delegate = context.coordinator
-        textView.font = font
-        textView.adjustsFontForContentSizeCategory = true
-        textView.backgroundColor = .clear
-        return textView
-    }
-
-    func updateUIView(_ textView: UITextView, context: Context) {
-        textView.text = text
-        // move it to the next run loop to fix an iOS 13 issue
-        DispatchQueue.main.async {
-            if editing {
-                textView.becomeFirstResponder()
-            } else {
-                textView.resignFirstResponder()
-            }
-        }
     }
 }
 

@@ -27,6 +27,7 @@ public enum PersistenceError: Error {
     case query(Error)
     case unknown(Error)
     case badFile(Error?)
+    case tooManyConnections
 
     // MARK: Public
 
@@ -37,6 +38,11 @@ public enum PersistenceError: Error {
 
 extension PersistenceError: LocalizedError {
     public var errorDescription: String? {
-        l("error.message.general")
+        switch self {
+        case .tooManyConnections:
+            return "Too many database connections. Please try again."
+        default:
+            return l("error.message.general")
+        }
     }
 }

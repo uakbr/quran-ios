@@ -31,58 +31,34 @@ final class HomeViewController: UIHostingController<HomeView> {
 
     private let viewModel: HomeViewModel
     private let readingSelectorBuilder: ReadingSelectorBuilder
-    private lazy var segmentedControl = UISegmentedControl(frame: .zero)
 
     private func initialize() {
-        configureSegmentedControl()
+        configureNavigationBar()
+    }
+
+    private func configureNavigationBar() {
+        // Set basic navigation properties
+        title = l("tab.home")
+        
+        // Configure the reading selector button
         configureNavigationBarButtons()
     }
 
-    private func configureSegmentedControl() {
-        segmentedControl.insertSegment(withTitle: lAndroid("quran_sura"), at: 0, animated: false)
-        segmentedControl.insertSegment(withTitle: lAndroid("quran_juz2"), at: 1, animated: false)
-        segmentedControl.selectedSegmentIndex = viewModel.type.rawValue
-        segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
-        navigationItem.titleView = segmentedControl
-        segmentChanged()
-    }
-
     private func configureNavigationBarButtons() {
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage.symbol("books.vertical.fill"),
+        let readingSelectorButton = UIBarButtonItem(
+            image: UIImage(systemName: "textformat"),
             style: .plain,
             target: self,
-            action: #selector(openReadingSelectors)
+            action: #selector(readingItemTapped)
         )
-
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            image: UIImage.symbol("arrow.up.arrow.down"),
-            style: .plain,
-            target: self,
-            action: #selector(toggleSort)
-        )
+        readingSelectorButton.accessibilityLabel = l("settings.reading.title")
+        
+        navigationItem.rightBarButtonItem = readingSelectorButton
     }
 
     @objc
-    private func toggleSort() {
-        viewModel.toggleSurahSortOrder()
-    }
-
-    @objc
-    private func openReadingSelectors() {
-        let readingSelector = readingSelectorBuilder.build()
-        navigationController?.pushViewController(readingSelector, animated: true)
-    }
-
-    @objc
-    private func segmentChanged() {
-        let type = HomeViewType(rawValue: segmentedControl.selectedSegmentIndex) ?? .suras
-        switch type {
-        case .suras:
-            navigationItem.title = lAndroid("quran_sura")
-        case .juzs:
-            navigationItem.title = lAndroid("quran_juz2")
-        }
-        viewModel.type = type
+    private func readingItemTapped() {
+        let readingSelectorViewController = readingSelectorBuilder.build()
+        present(readingSelectorViewController, animated: true)
     }
 }

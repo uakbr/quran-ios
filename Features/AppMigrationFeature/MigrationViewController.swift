@@ -7,14 +7,15 @@
 //
 
 import NoorUI
-import NVActivityIndicatorView
-import UIKit
+import SwiftUI
 
-public class MigrationViewController: BaseViewController {
+public class MigrationViewController: UIHostingController<MigrationView> {
     // MARK: Lifecycle
 
     public init() {
-        super.init(nibName: nil, bundle: .module)
+        let viewModel = MigrationViewModel()
+        super.init(rootView: MigrationView(viewModel: viewModel))
+        self.viewModel = viewModel
     }
 
     @available(*, unavailable)
@@ -24,20 +25,98 @@ public class MigrationViewController: BaseViewController {
 
     // MARK: Public
 
-    override public func viewDidLoad() {
-        super.viewDidLoad()
-
-        activityIndicator.startAnimating()
-    }
-
     public func setTitles(_ titles: Set<String>) {
-        loadViewIfNeeded()
-        textLabel.numberOfLines = 0
-        textLabel.text = titles.joined(separator: "\n")
+        viewModel.setTitles(titles)
     }
 
-    // MARK: Internal
+    // MARK: Private
 
-    @IBOutlet var textLabel: UILabel!
-    @IBOutlet var activityIndicator: NVActivityIndicatorView!
+    private let viewModel: MigrationViewModel
+}
+
+// MARK: - SwiftUI View
+
+public struct MigrationView: View {
+    @StateObject var viewModel: MigrationViewModel
+    
+    public var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background color
+                Color.systemBackground
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    Spacer()
+                    
+                    // App Icon or Logo
+                    Image(systemName: "book.quran")
+                        .font(.system(size: 80))
+                        .foregroundColor(.primary)
+                    
+                    // Migration text
+                    if !viewModel.titles.isEmpty {
+                        VStack(spacing: 16) {
+                            Text("Upgrading App")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(Array(viewModel.titles), id: \.self) { title in
+                                    Text(title)
+                                        .font(.body)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Activity Indicator
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(1.2)
+                        .tint(.accentColor)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 32)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+}
+
+// MARK: - ViewModel
+
+@MainActor
+public class MigrationViewModel: ObservableObject {
+    @Published var titles: Set<String> = []
+    
+    public init() {}
+    
+    public func setTitles(_ titles: Set<String>) {
+        self.titles = titles
+    }
+}
+
+// MARK: - Preview
+
+struct MigrationView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            // Empty state
+            MigrationView(viewModel: MigrationViewModel())
+                .previewDisplayName("Empty State")
+            
+            // With titles
+            MigrationView(viewModel: {
+                let vm = MigrationViewModel()
+                vm.setTitles(["Updating audio files", "Migrating user data", "Optimizing database"])
+                return vm
+            }())
+            .previewDisplayName("With Migration Tasks")
+        }
+    }
 }

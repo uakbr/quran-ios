@@ -8,6 +8,7 @@
 
 import Foundation
 import Timing
+import VLogging
 
 @MainActor
 class AudioPlayer {
@@ -17,14 +18,24 @@ class AudioPlayer {
         self.request = request
         audioPlaying = AudioPlaying(request: request, fileIndex: 0, frameIndex: 0)
         player = Player(url: request.files[0].url)
-        interruptionMonitor.onAudioInterruption = { [weak self] in
-            self?.onAudioInterruption(type: $0)
+        
+        // Use weak reference to prevent retain cycle
+        interruptionMonitor.onAudioInterruption = { [weak self] interruption in
+            self?.onAudioInterruption(type: interruption)
         }
+        
+        // Setup player callbacks with weak reference
+        setupPlayerCallbacks()
+    }
+    
+    deinit {
+        logger.debug("AudioPlayer: deallocating")
+        cleanup()
     }
 
     // MARK: Internal
 
-    var actions: QueuePlayerActions?
+    weak var actions: QueuePlayerActions?
 
     // MARK: - Interruption
 
@@ -54,6 +65,7 @@ class AudioPlayer {
 
     func stop() {
         timer?.cancel()
+        timer = nil
         player.stop()
         actions?.playbackEnded()
     }
@@ -77,27 +89,44 @@ class AudioPlayer {
             stop()
         }
     }
-
+    
     // MARK: Private
 
     private let interruptionMonitor = AudioInterruptionMonitor()
     private let request: AudioRequest
     private var audioPlaying: AudioPlaying
-
+    
     private var player: Player {
         didSet {
-            player.onRateChanged = { [weak self] in
-                self?.rateChanged(to: $0)
-            }
+            setupPlayerCallbacks()
         }
     }
-
+    
     private var timer: Timing.Timer? {
-        didSet { oldValue?.cancel() }
+        didSet { 
+            // Properly cleanup old timer to prevent memory leaks
+            oldValue?.cancel() 
+        }
     }
-
+    
+    private func setupPlayerCallbacks() {
+        player.onRateChanged = { [weak self] rate in
+            await self?.rateChanged(to: rate)
+        }
+    }
+    
+    private func cleanup() {
+        timer?.cancel()
+        timer = nil
+        player.stop()
+        
+        // Clear callbacks to prevent retain cycles
+        player.onRateChanged = nil
+        interruptionMonitor.onAudioInterruption = nil
+    }
+    
     // MARK: - Repeat Logic
-
+    
     private func play(fileIndex: Int, frameIndex: Int, forceSeek: Bool) {
         let oldFileIndex = audioPlaying.filePlaying.fileIndex
         let oldFrameIndex = audioPlaying.framePlaying.frameIndex
@@ -184,7 +213,7 @@ class AudioPlayer {
 
     // MARK: - PlayerDelegate
 
-    private func rateChanged(to rate: Float) {
+    private func rateChanged(to rate: Float) async {
         actions?.playbackRateChanged(rate)
     }
 

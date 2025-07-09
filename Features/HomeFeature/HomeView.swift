@@ -25,7 +25,9 @@ struct HomeView: View {
             selectLastPage: { viewModel.navigateTo($0) },
             selectSura: { viewModel.navigateTo($0) },
             selectQuarter: { viewModel.navigateTo($0) },
-            surahSortOrder: viewModel.surahSortOrder
+            surahSortOrder: viewModel.surahSortOrder,
+            toggleSortOrder: { viewModel.toggleSurahSortOrder() },
+            setViewType: { viewModel.type = $0 }
         )
     }
 }
@@ -35,117 +37,163 @@ private struct HomeViewUI: View {
     let lastPages: [LastPage]
     let suras: [Sura]
     let quarters: [QuarterItem]
+    let surahSortOrder: SurahSortOrder
 
     let start: AsyncAction
-
     let selectLastPage: ItemAction<Page>
     let selectSura: ItemAction<Sura>
     let selectQuarter: ItemAction<QuarterItem>
-    let surahSortOrder: SurahSortOrder
+    let toggleSortOrder: Action
+    let setViewType: ItemAction<HomeViewType>
 
     var body: some View {
-        NoorList {
-            NoorSection(title: lAndroid("recent_pages"), lastPages) { lastPage in
-                lastPageView(lastPage)
-                    .accessibilityIdentifier("recent_page_\(lastPage.page.pageNumber)")
-            }
-
-            switch type {
-            case .suras:
-                sectionsView(items: suras, groupBy: \.page.startJuz) { sura in
-                    suraView(sura)
-                        .accessibilityIdentifier("sura_\(sura.suraNumber)")
-                }
-            case .juzs:
-                sectionsView(items: quarters, groupBy: \.quarter.juz) { quarter in
-                    quarterView(quarter)
-                        .accessibilityIdentifier("quarter_\(quarter.quarter.juz)_\(quarter.quarter.quarter)")
-                }
-            }
+        VStack(spacing: 0) {
+            // Custom segmented control
+            HomeSegmentedControl(
+                selectedType: type,
+                onSelectionChanged: setViewType
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            
+            // Main content
+            contentView
         }
         .task { await start() }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Quran navigation")
-        .accessibilityHint("Browse suras, juzs, and recent pages")
     }
 
     @ViewBuilder
-    private func lastPageView(_ lastPage: LastPage) -> some View {
-        let ayah = lastPage.page.firstVerse
-        return NoorListItem(
-            image: .init(.lastPage, color: .secondaryLabel),
-            title: "\(ayah.sura.localizedName()) \(sura: ayah.sura.arabicSuraName)",
-            subtitle: .init(text: lastPage.createdOn.timeAgo(), location: .bottom),
-            accessory: .text(NumberFormatter.shared.format(lastPage.page.pageNumber)),
-            action: { selectLastPage(lastPage.page) }
-        )
-        .accessibilityLabel("Recent page: \(ayah.sura.localizedName()), page \(lastPage.page.pageNumber)")
-        .accessibilityHint("Double tap to continue reading from this page")
-        .accessibilityValue("Last read \(lastPage.createdOn.timeAgo())")
-    }
-
-    @ViewBuilder
-    private func suraView(_ sura: Sura) -> some View {
-        let ayahsString = lFormat("verses", table: .android, sura.verses.count)
-        let suraType = sura.isMakki ? lAndroid("makki") : lAndroid("madani")
-        let numberFormatter = NumberFormatter.shared
-        
-        return NoorListItem(
-            title: "\(sura.localizedName(withNumber: true)) \(sura: sura.arabicSuraName)",
-            subtitle: .init(text: "\(suraType) - \(ayahsString)", location: .bottom),
-            accessory: .text(numberFormatter.format(sura.page.pageNumber)),
-            action: { selectSura(sura) }
-        )
-        .accessibilityLabel("Sura \(sura.suraNumber): \(sura.localizedName())")
-        .accessibilityHint("Double tap to read this sura")
-        .accessibilityValue("\(suraType), \(ayahsString), starts on page \(sura.page.pageNumber)")
-    }
-
-    @ViewBuilder
-    private func quarterView(_ item: QuarterItem) -> some View {
-        let quarter = item.quarter
-        let ayah = quarter.firstVerse
-        let page = ayah.page
-        let localizedVerse = ayah.localizedName
-        let arabicSuraName = ayah.sura.arabicSuraName
-        
-        return NoorListItem(
-            title: "\(quarter.localizedName) - \(localizedVerse) \(sura: arabicSuraName)",
-            rightSubtitle: "\(verse: item.ayahText, color: .clear, lineLimit: 1)",
-            accessory: .text(NumberFormatter.shared.format(page.pageNumber)),
-            action: { selectQuarter(item) }
-        )
-        .accessibilityLabel("Juz \(quarter.juz), quarter \(quarter.quarter)")
-        .accessibilityHint("Double tap to read from this location")
-        .accessibilityValue("\(localizedVerse), starts on page \(page.pageNumber)")
-    }
-
-    @ViewBuilder
-    func sectionsView<Item: Identifiable>(
-        items: [Item],
-        groupBy: (Item) -> Juz,
-        @ViewBuilder listItem: @escaping (Item) -> some View
-    ) -> some View {
-        let itemsByJuz = Dictionary(grouping: items, by: groupBy)
-        let juzs = itemsByJuz.keys.sorted {
-            surahSortOrder.rawValue * ($0.juzNumber - $1.juzNumber) < 0
+    private var contentView: some View {
+        switch type {
+        case .suras:
+            surasView
+        case .juzs:
+            quartersView
         }
+    }
 
-        ForEach(juzs) { juz in
-            let items = (itemsByJuz[juz] ?? []).sorted {
-                switch ($0, $1) {
-                case let (thisSura as Sura, thatSura as Sura):
-                    surahSortOrder.rawValue * (thisSura.suraNumber - thatSura.suraNumber) < 0
-                case let (thisQuarter as QuarterItem, thatQuarter as QuarterItem):
-                    surahSortOrder.rawValue * (thisQuarter.quarter.quarterNumber - thatQuarter.quarter.quarterNumber) < 0
-                default:
-                    false
+    private var surasView: some View {
+        NoorList {
+            if !lastPages.isEmpty {
+                lastPagesSection
+            }
+            surasSection
+        }
+    }
+
+    private var quartersView: some View {
+        NoorList {
+            if !lastPages.isEmpty {
+                lastPagesSection
+            }
+            quartersSection
+        }
+    }
+
+    private var lastPagesSection: some View {
+        NoorSection(title: l("home.recent"), lastPages) { lastPage in
+            NoorListItem(
+                title: .text(lastPage.suraName),
+                subheading: lastPage.pageDescription,
+                accessory: .text(NumberFormatter.shared.format(lastPage.page.pageNumber))
+            ) {
+                selectLastPage(lastPage.page)
+            }
+            .accessibilityIdentifier("recent_page_\(lastPage.page.pageNumber)")
+            .accessibilityLabel("\(lastPage.suraName), \(lastPage.pageDescription)")
+            .accessibilityHint(l("accessibility.tap-to-open-page"))
+        }
+    }
+
+    private var surasSection: some View {
+        NoorSection(
+            title: l("home.suras"),
+            titleAccessory: sortButton
+        ) {
+            LazyVStack {
+                let sortedSuras = surahSortOrder == .ascending ? suras : suras.reversed()
+                ForEach(sortedSuras) { sura in
+                    NoorListItem(
+                        title: .text(sura.localizedName(withNumber: true, arabicName: true)),
+                        accessory: .text(NumberFormatter.shared.format(sura.firstPageNumber))
+                    ) {
+                        selectSura(sura)
+                    }
+                    .accessibilityIdentifier("sura_\(sura.suraNumber)")
+                    .accessibilityLabel(sura.localizedName(withNumber: true, arabicName: false))
+                    .accessibilityValue("Page \(sura.firstPageNumber)")
+                    .accessibilityHint(l("accessibility.tap-to-open-sura"))
                 }
             }
-            NoorSection(title: juz.localizedName, items) { item in
-                listItem(item)
+        }
+    }
+
+    private var quartersSection: some View {
+        NoorSection(title: l("home.quarters")) {
+            LazyVStack {
+                ForEach(quarters) { quarterItem in
+                    NoorListItem(
+                        title: .text(quarterItem.quarter.localizedName()),
+                        subheading: quarterItem.ayahText,
+                        accessory: .text(NumberFormatter.shared.format(quarterItem.quarter.firstPageNumber))
+                    ) {
+                        selectQuarter(quarterItem)
+                    }
+                    .accessibilityIdentifier("quarter_\(quarterItem.quarter.number)")
+                    .accessibilityLabel(quarterItem.quarter.localizedName())
+                    .accessibilityValue("Page \(quarterItem.quarter.firstPageNumber)")
+                    .accessibilityHint(l("accessibility.tap-to-open-quarter"))
+                }
             }
         }
+    }
+
+    private var sortButton: some View {
+        Button(action: toggleSortOrder) {
+            Image(systemName: surahSortOrder == .ascending ? "arrow.up" : "arrow.down")
+                .foregroundColor(.accentColor)
+        }
+        .accessibilityLabel(l("home.sort-suras"))
+        .accessibilityHint(surahSortOrder == .ascending ? l("accessibility.sort-descending") : l("accessibility.sort-ascending"))
+    }
+}
+
+// MARK: - Custom Segmented Control
+
+private struct HomeSegmentedControl: View {
+    let selectedType: HomeViewType
+    let onSelectionChanged: ItemAction<HomeViewType>
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            segmentButton(for: .suras, title: lAndroid("quran_sura"))
+            segmentButton(for: .juzs, title: lAndroid("quran_juz2"))
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondarySystemGroupedBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.separator, lineWidth: 0.5)
+        )
+    }
+    
+    private func segmentButton(for type: HomeViewType, title: String) -> some View {
+        Button(action: { onSelectionChanged(type) }) {
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(selectedType == type ? .white : .primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(selectedType == type ? Color.accentColor : Color.clear)
+                        .animation(.easeInOut(duration: 0.2), value: selectedType)
+                )
+        }
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selectedType == type ? .isSelected : [])
     }
 }
 
@@ -180,7 +228,9 @@ struct HomeView_Previews: PreviewProvider {
                     selectLastPage: { _ in },
                     selectSura: { _ in },
                     selectQuarter: { _ in },
-                    surahSortOrder: .ascending
+                    surahSortOrder: .ascending,
+                    toggleSortOrder: {},
+                    setViewType: { _ in }
                 )
                 .navigationTitle("Home")
                 .toolbar {

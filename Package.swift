@@ -560,7 +560,6 @@ private func featuresTargets() -> [[Target]] {
             "AppMigrator",
             "ReciterService",
             "Utilities",
-            "NVActivityIndicatorView",
             "NoorUI",
         ]),
 
