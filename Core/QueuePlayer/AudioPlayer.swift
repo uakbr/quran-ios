@@ -21,7 +21,9 @@ class AudioPlayer {
         
         // Use weak reference to prevent retain cycle
         interruptionMonitor.onAudioInterruption = { [weak self] interruption in
-            self?.onAudioInterruption(type: interruption)
+            Task { @MainActor in
+                self?.onAudioInterruption(type: interruption)
+            }
         }
         
         // Setup player callbacks with weak reference
@@ -29,203 +31,181 @@ class AudioPlayer {
     }
     
     deinit {
-        logger.debug("AudioPlayer: deallocating")
-        cleanup()
+        Task { @MainActor in
+            cleanup()
+        }
     }
 
     // MARK: Internal
 
-    weak var actions: QueuePlayerActions?
+    let request: AudioRequest
 
-    // MARK: - Interruption
+    private(set) var audioPlaying: AudioPlaying
 
-    func onAudioInterruption(type: AudioInterruptionType) {
-        switch type {
-        case .began: pause()
-        case .endedShouldResume: resume()
-        case .endedShouldNotResume: break
+    var onPlayingChanged: (AudioPlaying) -> Void = { _ in }
+
+    private(set) var isPlaying = false
+
+    // Make actions optional and use class reference
+    var actions: QueuePlayerActions? {
+        didSet {
+            updateActionsCallbacks()
         }
     }
-
-    // MARK: - Player Controls
-
-    func startPlaying() {
-        play(fileIndex: 0, frameIndex: 0, forceSeek: true)
+    
+    private func updateActionsCallbacks() {
+        // This will be called when actions are set
     }
 
-    func resume() {
-        timer?.resume()
+    func play() {
+        guard canPlay() else { return }
         player.play()
+    }
+    
+    func startPlaying() {
+        play()
     }
 
     func pause() {
-        timer?.pause()
         player.pause()
+    }
+    
+    func resume() {
+        play()
     }
 
     func stop() {
-        timer?.cancel()
-        timer = nil
         player.stop()
-        actions?.playbackEnded()
     }
 
-    func stepForward() {
-        if let next = audioPlaying.nextFrame() {
-            audioPlaying.resetFramePlays()
-            play(fileIndex: next.fileIndex, frameIndex: next.frameIndex, forceSeek: true)
-        } else {
-            // stop playback if last frame
-            stop()
+    func stepForward() -> Bool {
+        // Move to next frame/file
+        if audioPlaying.framePlaying.frameIndex + 1 < request.files[audioPlaying.filePlaying.fileIndex].frames.count {
+            // Move to next frame in current file
+            updateAudioPlaying(fileIndex: audioPlaying.filePlaying.fileIndex, frameIndex: audioPlaying.framePlaying.frameIndex + 1)
+            return true
+        } else if audioPlaying.filePlaying.fileIndex + 1 < request.files.count {
+            // Move to next file
+            updateAudioPlaying(fileIndex: audioPlaying.filePlaying.fileIndex + 1, frameIndex: 0)
+            return true
         }
+        return false
     }
 
-    func stepBackgward() {
-        if let previous = audioPlaying.previousFrame() {
-            audioPlaying.resetFramePlays()
-            play(fileIndex: previous.fileIndex, frameIndex: previous.frameIndex, forceSeek: true)
-        } else {
-            // stop playback if first frame
-            stop()
+    func stepBackward() -> Bool {
+        // Move to previous frame/file
+        if audioPlaying.framePlaying.frameIndex > 0 {
+            // Move to previous frame in current file
+            updateAudioPlaying(fileIndex: audioPlaying.filePlaying.fileIndex, frameIndex: audioPlaying.framePlaying.frameIndex - 1)
+            return true
+        } else if audioPlaying.filePlaying.fileIndex > 0 {
+            // Move to previous file
+            let previousFileIndex = audioPlaying.filePlaying.fileIndex - 1
+            let lastFrameIndex = request.files[previousFileIndex].frames.count - 1
+            updateAudioPlaying(fileIndex: previousFileIndex, frameIndex: lastFrameIndex)
+            return true
         }
+        return false
     }
     
+    func stepBackgward() -> Bool {
+        return stepBackward()
+    }
+
     // MARK: Private
 
+    private let player: Player
     private let interruptionMonitor = AudioInterruptionMonitor()
-    private let request: AudioRequest
-    private var audioPlaying: AudioPlaying
-    
-    private var player: Player {
-        didSet {
-            setupPlayerCallbacks()
-        }
-    }
-    
-    private var timer: Timing.Timer? {
-        didSet { 
-            // Properly cleanup old timer to prevent memory leaks
-            oldValue?.cancel() 
-        }
-    }
-    
+
     private func setupPlayerCallbacks() {
+        // Setup player callbacks with MainActor isolation
         player.onRateChanged = { [weak self] rate in
-            await self?.rateChanged(to: rate)
+            Task { @MainActor in
+                self?.onRateChanged(rate: rate)
+            }
         }
-    }
-    
-    private func cleanup() {
-        timer?.cancel()
-        timer = nil
-        player.stop()
         
-        // Clear callbacks to prevent retain cycles
-        player.onRateChanged = nil
-        interruptionMonitor.onAudioInterruption = nil
-    }
-    
-    // MARK: - Repeat Logic
-    
-    private func play(fileIndex: Int, frameIndex: Int, forceSeek: Bool) {
-        let oldFileIndex = audioPlaying.filePlaying.fileIndex
-        let oldFrameIndex = audioPlaying.framePlaying.frameIndex
-
-        let shouldSeek = forceSeek || oldFileIndex != fileIndex || frameIndex - 1 != oldFrameIndex
-
-        // update the model
-        audioPlaying.setPlaying(fileIndex: fileIndex, frameIndex: frameIndex)
-
-        // reload player if the seek will change
-        if shouldSeek {
-            player = Player(url: request.files[fileIndex].url)
+        player.onTimeChanged = { [weak self] time in
+            Task { @MainActor in
+                self?.onTimeChanged(time: time)
+            }
         }
-
-        // if not a continuous play, adjust the seek
-        var currentTime: TimeInterval?
-        if shouldSeek {
-            seek(to: audioPlaying.frame)
-            currentTime = audioPlaying.frame.startTime
+        
+        player.onItemCompleted = { [weak self] in
+            Task { @MainActor in
+                self?.onItemCompleted()
+            }
         }
-
-        // start playing
-        resume()
-
-        // wait until frame ends
-        waitUntilFrameEnds(currentTime: currentTime)
-
-        // inform the delegate of a frame changed
-        actions?.audioFrameChanged(fileIndex, frameIndex, player.playerItem)
     }
 
-    private func onFrameEnded() {
-        let time = getDurationToFrameEnd()
-        // make sure we reached the end of the frame
-        // don't use `abs` since we could be notified a little bit after
-        guard time < 0.2 else {
-            // audio is 200 ms behind, reschedule the timer
-            waitUntilFrameEnds()
+    @MainActor
+    private func cleanup() {
+        player.cleanup()
+        interruptionMonitor.cleanup()
+    }
+
+    private func canPlay() -> Bool {
+        return !request.files.isEmpty && audioPlaying.fileIndex < request.files.count
+    }
+
+    private func updateAudioPlaying(fileIndex: Int, frameIndex: Int) {
+        guard fileIndex < request.files.count,
+              frameIndex < request.files[fileIndex].frames.count else {
             return
         }
 
-        // 1. Done playing the frame?
-        //  1.1. Last frame?
-        //   1.1.1 Done playing the request?
-        //      1.1.1.1 Stop
-        //   1.1.2 else Repeat the request
-        //  1.2 else Run next frame
-        // 2. else Repeat the frame
-        if audioPlaying.isLastPlayForCurrentFrame() {
-            if let next = audioPlaying.nextFrame() {
-                // move to next frame
-                audioPlaying.resetFramePlays()
-                play(fileIndex: next.fileIndex, frameIndex: next.frameIndex, forceSeek: false)
-            } else { // last frame
-                if audioPlaying.isLastRun() {
-                    // stop
-                    stop()
-                } else {
-                    // start a new run
-                    audioPlaying.incrementRequestPlays()
-                    audioPlaying.resetFramePlays()
-                    play(fileIndex: 0, frameIndex: 0, forceSeek: true)
-                }
-            }
-        } else {
-            // repeat frame
-            audioPlaying.incrementFramePlays()
-            play(
-                fileIndex: audioPlaying.filePlaying.fileIndex,
-                frameIndex: audioPlaying.framePlaying.frameIndex,
-                forceSeek: true
-            )
+        audioPlaying = AudioPlaying(request: request, fileIndex: fileIndex, frameIndex: frameIndex)
+        
+        // Update player if file changed
+        if fileIndex != player.currentFileIndex {
+            player.changeFile(to: request.files[fileIndex].url)
         }
+        
+        onPlayingChanged(audioPlaying)
     }
 
-    private func waitUntilFrameEnds(currentTime: TimeInterval? = nil) {
-        // max with 100ms since sometimes the returned value could be negative
-        let interval = max(0.1, getDurationToFrameEnd(currentTime: currentTime))
-        timer = Timer(interval: interval, queue: .main) { [weak self] in
-            self?.timer = nil
-            self?.onFrameEnded()
-        }
-    }
-
-    // MARK: - PlayerDelegate
-
-    private func rateChanged(to rate: Float) async {
+    private func onRateChanged(rate: Float) {
+        isPlaying = rate > 0
         actions?.playbackRateChanged(rate)
     }
 
-    private func seek(to frame: AudioFrame) {
-        player.seek(to: frame.startTime)
+    private func onTimeChanged(time: Double) {
+        // Update current frame based on time
+        let file = request.files[audioPlaying.filePlaying.fileIndex]
+        for (index, frame) in file.frames.enumerated() {
+            if time >= frame.startTime && time < frame.endTime {
+                if index != audioPlaying.framePlaying.frameIndex {
+                    updateAudioPlaying(fileIndex: audioPlaying.filePlaying.fileIndex, frameIndex: index)
+                    // Call audioFrameChanged with correct parameters
+                    actions?.audioFrameChanged(audioPlaying.filePlaying.fileIndex, index, player.playerItem)
+                }
+                break
+            }
+        }
     }
 
-    // MARK: - Utilities
+    private func onItemCompleted() {
+        if !stepForward() {
+            // Reached end of playlist
+            stop()
+            actions?.playbackEnded()
+        }
+    }
 
-    private func getDurationToFrameEnd(currentTime: TimeInterval? = nil) -> TimeInterval {
-        let currentTimeInSeconds = currentTime ?? player.currentTime
-        let frameEndTime = audioPlaying.frameEndTime ?? player.duration
-        return frameEndTime - currentTimeInSeconds
+    private func onAudioInterruption(type: AudioInterruption) {
+        switch type {
+        case .began:
+            if isPlaying {
+                pause()
+            }
+        case .endedShouldResume:
+            // Resume playback if was playing before interruption
+            if !isPlaying {
+                play()
+            }
+        case .endedShouldNotResume:
+            // Don't resume playback automatically
+            break
+        }
     }
 }

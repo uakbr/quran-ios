@@ -47,7 +47,7 @@ struct CircularPendingView: View {
         Arc(circlePercentage: 0.94)
             .stroke(Color.accentColor, lineWidth: lineWidth)
             .rotationEffect(.degrees(rotationAngle))
-            .animation(.linear(duration: 1).repeatForever(autoreverses: false))
+            .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: rotationAngle)
             .onAppear {
                 rotationAngle = 360
             }

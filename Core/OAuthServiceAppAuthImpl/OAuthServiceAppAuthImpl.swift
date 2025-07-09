@@ -5,7 +5,7 @@
 //  Created by Mohannad Hassan on 08/01/2025.
 //
 
-import AppAuth
+@preconcurrency import AppAuth
 import OAuthService
 import UIKit
 import VLogging

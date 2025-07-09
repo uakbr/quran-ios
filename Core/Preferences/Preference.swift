@@ -1,74 +1,83 @@
 //
 //  Preference.swift
+//  
 //
-//
-//  Created by Mohamed Afifi on 2022-04-16.
+//  Created by Mohamed Afifi on 2023-06-03.
 //
 
 import Combine
+import Foundation
 
+@MainActor
 @propertyWrapper
-public final class Preference<T> {
+public struct Preference<T> {
     // MARK: Lifecycle
 
-    public init(_ key: PreferenceKey<T>, preferences: Preferences = .shared) {
+    public init(key: PreferenceKey<T>, defaultValue: @autoclosure @escaping @Sendable () -> T) {
         self.key = key
-        self.preferences = preferences
+        self.defaultValue = defaultValue
     }
 
     // MARK: Public
 
     public var wrappedValue: T {
-        get { preferences.valueForKey(key) }
-        set { preferences.setValue(newValue, forKey: key) }
+        get {
+            key.valueForKey() ?? defaultValue()
+        }
+        nonmutating set {
+            key.setValue(newValue, forKey: key.key)
+        }
     }
-
+    
     public var projectedValue: AnyPublisher<T, Never> {
-        preferences.notifications
-            .compactMap { [weak self] key in
-                if let self, key == self.key.key {
-                    return wrappedValue
-                } else {
-                    return nil
-                }
-            }
-            .eraseToAnyPublisher()
+        key.notifications.observe { _ in
+            self.wrappedValue
+        }
+        .prepend(wrappedValue)
+        .eraseToAnyPublisher()
     }
 
     // MARK: Private
 
     private let key: PreferenceKey<T>
-    private let preferences: Preferences
+    private let defaultValue: @Sendable () -> T
 }
 
+@MainActor
 @propertyWrapper
-public final class TransformedPreference<Raw, T> {
+public struct TransformedPreference<T, V> {
     // MARK: Lifecycle
 
     public init(
-        _ key: PreferenceKey<Raw>,
-        preferences: Preferences = .shared,
-        transformer: PreferenceTransformer<Raw, T>
+        key: PreferenceKey<T>,
+        transformer: PreferenceTransformer<T, V>,
+        defaultValue: @autoclosure @escaping @Sendable () -> V
     ) {
-        preference = Preference(key, preferences: preferences)
+        self.preference = Preference(key: key, defaultValue: transformer.rawToValue(transformer.valueToRaw(defaultValue())))
         self.transformer = transformer
+        self.defaultValue = defaultValue
     }
 
     // MARK: Public
 
-    public var wrappedValue: T {
-        get { transformer.rawToValue(preference.wrappedValue) }
-        set { preference.wrappedValue = transformer.valueToRaw(newValue) }
+    public var wrappedValue: V {
+        get {
+            transformer.rawToValue(preference.wrappedValue) ?? defaultValue()
+        }
+        nonmutating set {
+            preference.wrappedValue = transformer.valueToRaw(newValue)
+        }
     }
-
-    public var projectedValue: AnyPublisher<T, Never> {
+    
+    public var projectedValue: AnyPublisher<V, Never> {
         preference.projectedValue
-            .map(transformer.rawToValue)
+            .compactMap(transformer.rawToValue)
             .eraseToAnyPublisher()
     }
 
     // MARK: Private
 
-    private let preference: Preference<Raw>
-    private let transformer: PreferenceTransformer<Raw, T>
+    private let preference: Preference<T>
+    private let transformer: PreferenceTransformer<T, V>
+    private let defaultValue: @Sendable () -> V
 }

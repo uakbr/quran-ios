@@ -1,21 +1,17 @@
 //
 //  NoteService.swift
-//  Quran
 //
-//  Created by Afifi, Mohamed on 12/21/20.
-//  Copyright © 2020 Quran.com. All rights reserved.
+//
+//  Created by Mohamed Afifi on 2021-12-12.
 //
 
 import Analytics
-import Combine
 import Foundation
-import Localization
 import NotePersistence
-import Preferences
-import QuranAnnotations
 import QuranKit
 import QuranText
 import QuranTextKit
+import VLogging
 
 public struct NoteService {
     // MARK: Lifecycle
@@ -64,10 +60,10 @@ public struct NoteService {
     }
 
     public func textForVerses(_ verses: [AyahNumber]) async throws -> String {
-        let versesWithText = try await textDictionaryForVerses(verses)
+        let versesWithText = try await textService.textForVerses(verses, translations: [])
         let sortedVerses = verses.sorted()
         let versesText = sortedVerses.compactMap { verse in versesWithText[verse].map { (verse, $0) } }
-        let combinedVersesText = versesText.map { $0.1 + " \(NumberFormatter.arabicNumberFormatter.format($0.0.ayah))" }
+        let combinedVersesText = versesText.map { $0.1.arabicText + " \(NumberFormatter.arabicNumberFormatter.format($0.0.ayah))" }
             .joined(separator: " ")
         return combinedVersesText
     }
@@ -90,8 +86,8 @@ public struct NoteService {
     private var lastUsedHighlightColor: Note.Color
 
     private func textDictionaryForVerses(_ verses: [AyahNumber]) async throws -> [AyahNumber: String] {
-        let translatedVerses: TranslatedVerses = try await textService.textForVerses(verses, translations: [])
-        return Dictionary(zip(verses, translatedVerses.verses).map { ($0, $1.arabicText) }, uniquingKeysWith: { x, _ in x })
+        let versesWithText = try await textService.textForVerses(verses, translations: [])
+        return Dictionary(versesWithText.mapValues { $0.arabicText }, uniquingKeysWith: { x, _ in x })
     }
 }
 

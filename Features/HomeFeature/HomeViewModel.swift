@@ -132,7 +132,11 @@ final class HomeViewModel: ObservableObject {
     ) async -> [Quarter: String] {
         do {
             let verses = Array(quarters.map(\.firstVerse))
-            let translatedVerses: TranslatedVerses = try await textRetriever.textForVerses(verses, translations: [])
+            let versesWithText = try await textRetriever.textForVerses(verses, translations: [])
+            let translatedVerses = TranslatedVerses(
+                translations: [],
+                verses: verses.map { versesWithText[$0] ?? VerseText.empty }
+            )
             return cleanUpText(quarters: quarters, verses: verses, versesText: translatedVerses.verses)
         } catch {
             crasher.recordError(error, reason: "Failed to retrieve quarters text")

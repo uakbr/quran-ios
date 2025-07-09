@@ -67,21 +67,21 @@ final class AppInteractor {
         let db = CKContainer.default().privateCloudDatabase
         let zone = CKRecordZone(zoneName: "com.apple.coredata.cloudkit.zone")
         let query = CKQuery(recordType: "CD_MO_LastPage", predicate: NSPredicate(format: "TRUEPREDICATE"))
-        db.perform(query, inZoneWith: zone.zoneID) { [analytics] records, error in
-            if let error {
+        
+        Task {
+            do {
+                let (records, _) = try await db.records(matching: query, inZoneWith: zone.zoneID)
+                let ckLastPages = Set(records.values.compactMap { record in
+                    guard case .success(let record) = record else { return nil }
+                    return record["CD_page"] as? Int
+                })
+                
+                let cdLastPages = try await self.lastPagePersistence.retrieveAll()
+                let inSync = Set(cdLastPages.map(\.page)).isSubset(of: ckLastPages)
+                analytics.cloudkitLastPagesMatch(inSync ? .ok : .fail)
+            } catch {
                 logger.error("Error while accessing CloudKit \(error)")
                 analytics.cloudkitLastPagesMatch(.error)
-            } else {
-                let ckLastPages = Set((records ?? []).compactMap { $0["CD_page"] as? Int })
-                Task {
-                    do {
-                        let cdLastPages = try await self.lastPagePersistence.retrieveAll()
-                        let inSync = Set(cdLastPages.map(\.page)).isSubset(of: ckLastPages)
-                        analytics.cloudkitLastPagesMatch(inSync ? .ok : .fail)
-                    } catch {
-                        crasher.recordError(error, reason: "Failed to retrieve last pages from persistence.")
-                    }
-                }
             }
         }
     }

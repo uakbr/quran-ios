@@ -20,32 +20,26 @@ public struct TextView: View {
 
     public var body: some View {
         TextEditor(text: $text)
-            .font(font)
+            .font(.body)
             .background(Color.clear)
             .onTapGesture {
                 if !editing {
                     editing = true
                 }
             }
-            .onChange(of: editing) { isEditing in
-                // Handle editing state changes if needed
-                if isEditing {
-                    // Focus the text editor
-                    DispatchQueue.main.async {
-                        // TextEditor automatically handles focus in SwiftUI
-                    }
+            .onChange(of: editing) { _, isEditing in
+                // Handle editing state changes
+                if !isEditing {
+                    // End editing
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             }
     }
 
-    // MARK: Internal
-
-    @Binding var text: String
-    @Binding var editing: Bool
-
     // MARK: Private
 
-    private var font: Font = .body
+    @Binding private var text: String
+    @Binding private var editing: Bool
 }
 
 // MARK: - Modifiers

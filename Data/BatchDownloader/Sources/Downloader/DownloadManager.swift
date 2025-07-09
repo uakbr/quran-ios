@@ -59,6 +59,7 @@ public final class DownloadManager: Sendable {
         self.dataController = dataController
         self.sessionFactory = sessionFactory
         handler = DownloadSessionDelegate(dataController: dataController, fileManager: fileManager)
+        self._session = Locked(nil)
     }
 
     // MARK: Public
@@ -91,7 +92,7 @@ public final class DownloadManager: Sendable {
     // MARK: Private
 
     private let sessionFactory: SessionFactory
-    private var session: NetworkSession?
+    private let _session: Locked<NetworkSession?>
     private let handler: DownloadSessionDelegate
     private let dataController: DownloadBatchDataController
 
@@ -104,7 +105,7 @@ public final class DownloadManager: Sendable {
         operationQueue.underlyingQueue = dispatchQueue
 
         let session = sessionFactory(handler, operationQueue)
-        self.session = session
+        _session.withLock { $0 = session }
 
         return session
     }

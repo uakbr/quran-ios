@@ -186,8 +186,11 @@ public final class ContentTranslationViewModel: ObservableObject {
             let localTranslations = try await localTranslationsRetriever.getLocalTranslations()
             translations = selectedTranslationsPreferences.selectedTranslations(from: localTranslations)
 
-            let verses = verses
-            verseTexts = try await dataService.textForVerses(verses, translations: translations)
+            let versesWithText = try await dataService.textForVerses(verses, translations: translations)
+            verseTexts = TranslatedVerses(
+                translations: translations,
+                verses: verses.map { versesWithText[$0] ?? VerseText.empty }
+            )
 
             scrollToVerseIfNeeded()
         } catch {

@@ -13,21 +13,13 @@ import WordFramePersistence
 import WordFrameService
 import Caching
 
-public enum ImageDataServiceError: Error, LocalizedError {
+public enum ImageDataServiceError: Error {
     case imageNotFound(page: Page, path: String)
     case imageCorrupted(page: Page, path: String)
-    
-    public var errorDescription: String? {
-        switch self {
-        case .imageNotFound(let page, let path):
-            return "Image not found for page \(page.pageNumber) at path: \(path)"
-        case .imageCorrupted(let page, let path):
-            return "Image corrupted for page \(page.pageNumber) at path: \(path)"
-        }
-    }
+    case processingFailed(page: Page, error: Error)
 }
 
-public struct ImageDataService {
+public struct ImageDataService: Sendable {
     // MARK: Lifecycle
 
     public init(ayahInfoDatabase: URL, imagesURL: URL) {
@@ -35,6 +27,7 @@ public struct ImageDataService {
         persistence = GRDBWordFramePersistence(fileURL: ayahInfoDatabase)
         
         // Configure image cache with memory limits using our custom Cache
+        imageCache = Cache<NSNumber, ImagePage>()
         imageCache.countLimit = 50 // Limit to 50 cached images
         imageCache.name = "ImagePageCache"
     }
@@ -49,21 +42,34 @@ public struct ImageDataService {
         try await persistence.ayahNumbers(page)
     }
 
-    public func imageForPage(_ page: Page) async throws -> ImagePage {
+    public func image(for page: Page) async throws -> ImagePage {
         // Check cache first
-        let cacheKey = "page_\(page.pageNumber)_\(page.quran.rawValue)"
-        if let cachedImagePage = imageCache.object(forKey: cacheKey) {
-            return cachedImagePage
+        if let cachedImage = await imageCache.object(forKey: page.pageIndex as NSNumber) {
+            return cachedImage
         }
         
-        // Load on background queue for better performance
+        // Load image on background thread
         return try await withCheckedThrowingContinuation { continuation in
-            Task.detached(priority: .userInitiated) {
+            Task.detached {
                 do {
-                    let imagePage = try await self.loadImagePageFromDisk(page)
+                    let pageNumber = page.pageIndex  // Extract value to avoid capture
+                    let imageName = "page\(String(format: "%03d", pageNumber))"
+                    let imageURL = self.imagesURL.appendingPathComponent("\(imageName).png")
+                    
+                    guard FileManager.default.fileExists(atPath: imageURL.path) else {
+                        throw ImageDataServiceError.imageNotFound(page: page, path: imageURL.path)
+                    }
+                    
+                    guard let uiImage = UIImage(contentsOfFile: imageURL.path) else {
+                        throw ImageDataServiceError.imageCorrupted(page: page, path: imageURL.path)
+                    }
+                    
+                    // Decompress image on background thread
+                    let decompressedImage = await self.decompressImage(uiImage)
+                    let imagePage = ImagePage(page: page, image: decompressedImage)
                     
                     // Cache the result
-                    self.imageCache.setObject(imagePage, forKey: cacheKey)
+                    await self.imageCache.setObject(imagePage, forKey: pageNumber as NSNumber)
                     
                     continuation.resume(returning: imagePage)
                 } catch {
@@ -73,83 +79,49 @@ public struct ImageDataService {
         }
     }
 
-    // MARK: Internal
-
-    func wordFrames(_ page: Page) async throws -> WordFrameCollection {
-        let plainWordFrames = try await persistence.wordFrameCollectionForPage(page)
-        let wordFrames = processor.processWordFrames(plainWordFrames)
-        return wordFrames
-    }
-
     // MARK: Private
 
-    private let processor = WordFrameProcessor()
     private let persistence: WordFramePersistence
     private let imagesURL: URL
-    private let imageCache = Cache<String, ImagePage>()
+    private let imageCache: Cache<NSNumber, ImagePage>
 
-    private func loadImagePageFromDisk(_ page: Page) async throws -> ImagePage {
-        let imageURL = imageURLForPage(page)
-        guard let image = UIImage(contentsOfFile: imageURL.path) else {
-            logFiles(directory: imagesURL) // <reading>/images/width/
-            logFiles(directory: imagesURL.deletingLastPathComponent()) // <reading>/images/
-            logFiles(directory: imagesURL.deletingLastPathComponent().deletingLastPathComponent()) // <reading>/
-            logger.error("No image found for page '\(page)' at path: \(imageURL.path)")
-            throw ImageDataServiceError.imageNotFound(page: page, path: imageURL.path)
-        }
-
-        // Memory-efficient image processing
-        let optimizedImage = await optimizeImageForMemory(image)
-        let wordFrames = try await wordFrames(page)
-        
-        return ImagePage(image: optimizedImage, wordFrames: wordFrames, startAyah: page.firstVerse)
-    }
-    
-    private func optimizeImageForMemory(_ image: UIImage) async -> UIImage {
+    private func decompressImage(_ image: UIImage) async -> UIImage {
         return await withCheckedContinuation { continuation in
-            // Process on background queue to avoid blocking main thread
-            DispatchQueue.global(qos: .userInitiated).async {
-                // Decompress image to avoid repeated decompression during rendering
-                let decompressedImage = self.decompressImage(image)
+            Task.detached {
+                guard let cgImage = image.cgImage else { 
+                    continuation.resume(returning: image)
+                    return
+                }
+                
+                let width = cgImage.width
+                let height = cgImage.height
+                let colorSpace = CGColorSpaceCreateDeviceRGB()
+                
+                let context = CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: colorSpace,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                )
+                
+                guard let context = context else { 
+                    continuation.resume(returning: image)
+                    return
+                }
+                
+                context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+                
+                guard let decompressedCGImage = context.makeImage() else {
+                    continuation.resume(returning: image)
+                    return
+                }
+                
+                let decompressedImage = UIImage(cgImage: decompressedCGImage)
                 continuation.resume(returning: decompressedImage)
             }
         }
-    }
-    
-    private func decompressImage(_ image: UIImage) -> UIImage {
-        guard let cgImage = image.cgImage else { return image }
-        
-        let width = cgImage.width
-        let height = cgImage.height
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        
-        let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-        )
-        
-        guard let context = context else { return image }
-        
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
-        guard let decompressedCGImage = context.makeImage() else { return image }
-        
-        return UIImage(cgImage: decompressedCGImage, scale: image.scale, orientation: image.imageOrientation)
-    }
-
-    private func logFiles(directory: URL) {
-        let fileManager = FileManager.default
-        let files = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        let fileNames = files.map(\.lastPathComponent)
-        logger.error("Images: Directory \(directory) contains files \(fileNames)")
-    }
-
-    private func imageURLForPage(_ page: Page) -> URL {
-        imagesURL.appendingPathComponent("page\(page.pageNumber.as3DigitString()).png")
     }
 }

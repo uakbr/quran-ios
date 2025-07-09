@@ -15,6 +15,9 @@ enum AudioInterruptionType {
     case endedShouldNotResume
 }
 
+// Alias for compatibility
+typealias AudioInterruption = AudioInterruptionType
+
 @MainActor
 final class AudioInterruptionMonitor {
     // MARK: Lifecycle
@@ -28,10 +31,18 @@ final class AudioInterruptionMonitor {
             object: nil
         )
     }
+    
+    deinit {
+        cleanup()
+    }
 
     // MARK: Internal
 
     var onAudioInterruption: (@Sendable @MainActor (AudioInterruptionType) -> Void)?
+    
+    func cleanup() {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     // MARK: Private
 

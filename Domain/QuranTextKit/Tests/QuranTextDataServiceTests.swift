@@ -49,7 +49,11 @@ final class QuranTextDataServiceTests: XCTestCase {
             [quran.suras[1].verses[0]],
         ]
         for verses in tests {
-            let versesText: TranslatedVerses = try await textService.textForVerses(verses, translations: [])
+            let versesWithText = try await textService.textForVerses(verses, translations: [])
+            let translatedVerses = TranslatedVerses(
+                translations: [],
+                verses: verses.map { versesWithText[$0] ?? VerseText.empty }
+            )
 
             let expectedVerses = verses.map {
                 VerseText(
@@ -60,7 +64,7 @@ final class QuranTextDataServiceTests: XCTestCase {
                 )
             }
             let expected = TranslatedVerses(translations: [], verses: expectedVerses)
-            XCTAssertEqual(expected, versesText)
+            XCTAssertEqual(expected, translatedVerses)
         }
     }
 

@@ -5,7 +5,7 @@
 //  Created by Afifi, Mohamed on 8/16/20.
 //
 
-import CommonCrypto
+import CryptoKit
 import Foundation
 
 struct MD5Calculator {
@@ -16,17 +16,14 @@ struct MD5Calculator {
         let file = try FileHandle(forReadingFrom: url)
         defer { file.closeFile() }
 
-        // Create and initialize MD5 context:
-        var context = CC_MD5_CTX()
-        CC_MD5_Init(&context)
+        // Create MD5 hasher:
+        var hasher = Insecure.MD5()
 
-        // Read up to `bufferSize` bytes, until EOF is reached, and update MD5 context:
+        // Read up to `bufferSize` bytes, until EOF is reached, and update MD5 hasher:
         while autoreleasepool(invoking: {
             let data = file.readData(ofLength: bufferSize)
             if !data.isEmpty {
-                data.withUnsafeBytes {
-                    _ = CC_MD5_Update(&context, $0.baseAddress, numericCast(data.count))
-                }
+                hasher.update(data: data)
                 return true // Continue
             } else {
                 return false // End of file
@@ -34,9 +31,7 @@ struct MD5Calculator {
         }) { }
 
         // Compute the MD5 digest:
-        var digest: [UInt8] = Array(repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
-        _ = CC_MD5_Final(&digest, &context)
-
+        let digest = hasher.finalize()
         return Data(digest)
     }
 

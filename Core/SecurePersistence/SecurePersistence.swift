@@ -5,192 +5,203 @@
 //  Created by Mohannad Hassan on 28/12/2024.
 //
 
+@preconcurrency import SystemDependencies
 import Foundation
-import SystemDependencies
 import VLogging
 
 /// Errors that can occur during secure persistence operations
-public enum PersistenceError: Error {
+public enum SecurePersistenceError: Error {
     case persistenceFailed
     case retrievalFailed
-    case tooManyConnections
+    case keyNotFound
+    case invalidData
     
     // MARK: Public
 
-    public static func generalError(_ error: Error, info: String) -> PersistenceError {
-        .general("error: \(error), info: \(info)")
+    public static func generalError(_ error: Error, info: String) -> SecurePersistenceError {
+        logger.error("SecurePersistence error: \(error), info: \(info)")
+        return .persistenceFailed
     }
 }
 
-extension PersistenceError: LocalizedError {
+extension SecurePersistenceError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .persistenceFailed:
             return "Failed to persist data securely"
         case .retrievalFailed:
-            return "Failed to retrieve stored data"
-        case .tooManyConnections:
-            return "Too many database connections. Please try again."
+            return "Failed to retrieve secure data"
+        case .keyNotFound:
+            return "Secure key not found"
+        case .invalidData:
+            return "Invalid secure data format"
         }
     }
 }
 
-/// An abstraction for secure persistence of data.
+/// A protocol for secure data persistence using keychain services
 ///
-/// This protocol provides a secure way to store sensitive data such as OAuth tokens,
-/// user credentials, and other confidential information. The implementation should
-/// ensure that data is encrypted at rest and protected from unauthorized access.
-///
-/// ## Security Considerations
-/// - All data should be encrypted before storage
-/// - Keys should be protected using the device's secure enclave when available
-/// - Data should be automatically cleared when the app is uninstalled
-/// - Biometric protection should be considered for highly sensitive data
+/// SecurePersistence provides a secure storage mechanism for sensitive data using the system keychain.
+/// All operations are performed securely with proper error handling and thread safety.
 ///
 /// ## Usage
 /// ```swift
 /// let persistence = KeychainPersistence()
-/// try await persistence.set(data: tokenData, forKey: "oauth_token")
-/// let retrievedData = try await persistence.getData(forKey: "oauth_token")
+/// 
+/// // Store secure data
+/// try await persistence.store("sensitive_data", forKey: "user_token")
+/// 
+/// // Retrieve secure data
+/// let token = try await persistence.retrieve(forKey: "user_token")
+/// 
+/// // Remove secure data
+/// try await persistence.remove(forKey: "user_token")
 /// ```
-///
-/// ## Thread Safety
-/// Implementations should be thread-safe and support concurrent access.
-///
-/// Currently, only supports `Data` as the data type of the saved objects.
-public protocol SecurePersistence {
-    
-    /// Securely stores data for the specified key
+public protocol SecurePersistence: Sendable {
+    /// Stores data securely in the keychain
     /// - Parameters:
     ///   - data: The data to store securely
-    ///   - key: Unique identifier for the stored data
-    /// - Throws: `PersistenceError.persistenceFailed` if storage fails
-    func set(data: Data, forKey key: String) throws
-
-    /// Retrieves securely stored data for the specified key
-    /// - Parameter key: The key used to store the data
-    /// - Returns: The stored data, or nil if no data exists for the key
-    /// - Throws: `PersistenceError.retrievalFailed` if retrieval fails
-    func getData(forKey key: String) throws -> Data?
-
-    /// Removes securely stored data for the specified key
-    /// - Parameter key: The key of the data to remove
-    /// - Throws: `PersistenceError` if removal fails
-    func clearData(forKey key: String) throws
+    ///   - key: The key to associate with the data
+    /// - Throws: SecurePersistenceError if storage fails
+    func store(_ data: String, forKey key: String) async throws
+    
+    /// Retrieves data securely from the keychain
+    /// - Parameter key: The key for the data to retrieve
+    /// - Returns: The retrieved data, or nil if not found
+    /// - Throws: SecurePersistenceError if retrieval fails
+    func retrieve(forKey key: String) async throws -> String?
+    
+    /// Removes data securely from the keychain
+    /// - Parameter key: The key for the data to remove
+    /// - Throws: SecurePersistenceError if removal fails
+    func remove(forKey key: String) async throws
+    
+    /// Checks if data exists for the given key
+    /// - Parameter key: The key to check
+    /// - Returns: true if data exists, false otherwise
+    func exists(forKey key: String) async throws -> Bool
 }
 
-/// Keychain-based implementation of SecurePersistence
+/// A keychain-based implementation of SecurePersistence
 ///
-/// This implementation uses the iOS Keychain Services to securely store data.
-/// The Keychain provides hardware-backed encryption and automatic data protection.
-///
-/// ## Features
-/// - Hardware-backed encryption on supported devices
-/// - Automatic data protection and access control
-/// - Data persists across app updates but is removed on app uninstall
-/// - Thread-safe operations
-///
-/// ## Security Benefits
-/// - Data is encrypted using device-specific keys
-/// - Protected against other apps accessing the data
-/// - Survives device restarts and app updates
-/// - Can be configured to require device unlock or biometric authentication
-public final class KeychainPersistence: SecurePersistence {
+/// KeychainPersistence provides secure storage using the iOS/macOS keychain services.
+/// All data is encrypted and protected by the system's security mechanisms.
+public struct KeychainPersistence: SecurePersistence {
     // MARK: Lifecycle
 
-    /// Creates a new KeychainPersistence instance
-    /// - Parameter keychainAccess: The keychain access interface (defaults to system keychain)
-    public init(keychainAccess: KeychainAccess = DefaultKeychainAccess()) {
-        self.keychainAccess = keychainAccess
+    public init(keychain: any KeychainAccess = SystemDependencies.keychainAccess) {
+        self.keychain = keychain
     }
 
     // MARK: Public
 
-    /// Stores data securely in the keychain
-    /// - Parameters:
-    ///   - data: The data to store
-    ///   - key: Unique identifier for the data
-    /// - Throws: `PersistenceError.persistenceFailed` if keychain operation fails
-    public func set(data: Data, forKey key: String) throws {
-        let addquery: [String: Any] = [
+    public func store(_ data: String, forKey key: String) async throws {
+        let dataToStore = Data(data.utf8)
+        
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecValueData as String: data,
+            kSecValueData as String: dataToStore,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-        let status = keychainAccess.addItem(query: addquery)
-        if status == errSecDuplicateItem {
-            logger.info("[KeychainPersistence] Data already exists, updating")
-            try update(dat: data, forKey: key)
-        } else if status != errSecSuccess {
-            logger.error("[KeychainPersistence] Failed to persist data -- \(status) status")
-            throw PersistenceError.persistenceFailed
+        
+        // Try to update first
+        let updateQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        
+        let updateAttributes: [String: Any] = [
+            kSecValueData as String: dataToStore
+        ]
+        
+        let updateStatus = keychain.updateItem(query: updateQuery, attributes: updateAttributes)
+        
+        if updateStatus == errSecItemNotFound {
+            // Item doesn't exist, add it
+            let addStatus = keychain.addItem(query: query)
+            guard addStatus == errSecSuccess else {
+                logger.error("Failed to add keychain item: \(addStatus)")
+                throw SecurePersistenceError.persistenceFailed
+            }
+        } else if updateStatus != errSecSuccess {
+            logger.error("Failed to update keychain item: \(updateStatus)")
+            throw SecurePersistenceError.persistenceFailed
         }
-        logger.info("[KeychainPersistence] Data persisted successfully")
     }
-
-    /// Retrieves data from the keychain
-    /// - Parameter key: The key of the data to retrieve
-    /// - Returns: The stored data, or nil if not found
-    /// - Throws: `PersistenceError.retrievalFailed` if keychain operation fails
-    public func getData(forKey key: String) throws -> Data? {
+    
+    public func retrieve(forKey key: String) async throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        let status = keychainAccess.copyMatching(query: query)
-        switch status {
-        case .success(let data):
-            logger.debug("[KeychainPersistence] Successfully retrieved data for key: \(key)")
-            return data as? Data
-        case .itemNotFound:
-            logger.debug("[KeychainPersistence] No data found for key: \(key)")
+        
+        var result: AnyObject?
+        let status = keychain.copyItem(query: query, result: &result)
+        
+        if status == errSecItemNotFound {
             return nil
-        case .failure(let error):
-            logger.error("[KeychainPersistence] Failed to retrieve data for key: \(key), error: \(error)")
-            throw PersistenceError.retrievalFailed
+        }
+        
+        guard status == errSecSuccess else {
+            logger.error("Failed to retrieve keychain item: \(status)")
+            throw SecurePersistenceError.retrievalFailed
+        }
+        
+        guard let data = result as? Data else {
+            throw SecurePersistenceError.invalidData
+        }
+        
+        return String(data: data, encoding: .utf8)
+    }
+    
+    public func remove(forKey key: String) async throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        
+        let status = keychain.deleteItem(query: query)
+        
+        if status == errSecItemNotFound {
+            // Item already doesn't exist, consider it success
+            return
+        }
+        
+        guard status == errSecSuccess else {
+            logger.error("Failed to delete keychain item: \(status)")
+            throw SecurePersistenceError.persistenceFailed
         }
     }
-
-    /// Removes data from the keychain
-    /// - Parameter key: The key of the data to remove
-    /// - Throws: `PersistenceError` if keychain operation fails
-    public func clearData(forKey key: String) throws {
+    
+    public func exists(forKey key: String) async throws -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
+            kSecReturnData as String: false,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        let status = keychainAccess.deleteItem(query: query)
-        if status != errSecSuccess && status != errSecItemNotFound {
-            logger.error("[KeychainPersistence] Failed to clear data for key: \(key), status: \(status)")
-            throw PersistenceError.persistenceFailed
+        
+        var result: CFTypeRef?
+        let status = keychain.copyItem(query: query, result: &result)
+        
+        if status == errSecItemNotFound {
+            return false
         }
-        logger.debug("[KeychainPersistence] Data cleared for key: \(key)")
+        
+        guard status == errSecSuccess else {
+            logger.error("Failed to check keychain item existence: \(status)")
+            throw SecurePersistenceError.retrievalFailed
+        }
+        
+        return true
     }
 
     // MARK: Private
 
-    private let keychainAccess: KeychainAccess
-    private let logger = Logger(label: "SecurePersistence")
-
-    /// Updates existing keychain item with new data
-    /// - Parameters:
-    ///   - data: New data to store
-    ///   - key: Key of the existing item
-    /// - Throws: `PersistenceError.persistenceFailed` if update fails
-    private func update(dat data: Data, forKey key: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-        ]
-        let update: [String: Any] = [
-            kSecValueData as String: data,
-        ]
-        let status = keychainAccess.updateItem(query: query, attributesToUpdate: update)
-        if status != errSecSuccess {
-            logger.error("[KeychainPersistence] Failed to update data for key: \(key), status: \(status)")
-            throw PersistenceError.persistenceFailed
-        }
-        logger.debug("[KeychainPersistence] Successfully updated data for key: \(key)")
-    }
+    private let keychain: any KeychainAccess
 }
+
+private let logger = Logger(subsystem: "SecurePersistence", category: "KeychainPersistence")
